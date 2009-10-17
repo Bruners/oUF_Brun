@@ -743,21 +743,6 @@ local Shared = function(self, unit)
 
 	self.PostCreateAuraIcon = PostCreateAuraIcon
 
-	if(self:GetAttribute"unitsuffix" == "pet") or (self:GetAttribute"unitsuffix" == "target") then
-		self.Power:Hide()
-		self.PvP:SetHeight(15)
-		self.PvP:SetWidth(15)
-		self.PvP:SetPoint("TOPRIGHT", 10, 10)
-		self:Tag(hpp, "[brunminushp]")
-		self:Tag(name, "[ShortName]")
-		self:SetAttribute("initial-height", 15)
-		self:SetAttribute("initial-width", 95)
-		self.Health:SetHeight(self:GetAttribute("initial-height"))
-		self.Range = true
-		self.inRangeAlpha = 1
-		self.outsideRangeAlpha = .6
-	end
-
 	-- Small hacks are always allowed...
 	local unit = unit or 'party'
 	if(UnitSpecific[unit]) then
