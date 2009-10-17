@@ -1,15 +1,11 @@
 ## Interface: 30200
 ## Title: oUF: |cffff8000Brun|r 
 ## Author: bruners
-## Version: 1.5
+## Version: 1.6
 ## X-eMail: bruners@gmail.com
 ## RequiredDeps: oUF
-## OptionalDeps: oUF_CombatFeedback, oUF_SpellRange, oUF_Swing, oUF_BarFader, oUF_DebuffHighlight, oUF_Experience, oUF_Reputation, oUF_RuneBar, oUF_Smooth
+## OptionalDeps: oUF_CombatFeedback, oUF_SpellRange, oUF_BarFader, oUF_Experience, oUF_Reputation, oUF_Smooth
 ## Notes: oUF 1.3.19
-## X-Curse-Packaged-Version: 1.5
-## X-Curse-Project-Name: oUF_Brun
-## X-Curse-Project-ID: ouf_brun
-## X-Curse-Repository-ID: wow/ouf_brun/mainline
 
 oUF_Brun.xml
 oUF_BrunTags.lua
