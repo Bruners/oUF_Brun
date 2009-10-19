@@ -56,7 +56,8 @@ local partyPetAndTargetWidth = 95 -- Party target and party pet width.
 
 local substr = string.sub
 local _, playerClass = UnitClass("player")
-local GAP = 0
+local RUNEBARGAP = 0
+local EXPREPBARGAP = 21
 local backdrop = {
 	bgFile="Interface\\Tooltips\\UI-Tooltip-Background",
 	tile = true, 
@@ -205,37 +206,7 @@ local UnitSpecific = {
 		combat:SetTexCoord(0.58, 0.90, 0.08, 0.41)
 		
 		self.Combat = combat
-		
-		if (playerShowBuffs) then
-			local buffs = CreateFrame("Frame", nil, self)
-			buffs:SetPoint("BOTTOMRIGHT", hp, "TOPRIGHT",0,3)
-			buffs:SetHeight(24)
-			buffs:SetWidth(width)
-			buffs.num = 20
-			buffs.size = 24
-			buffs.spacing = 1
-			buffs.initialAnchor = ("TOPRIGHT")
-			buffs["growth-y"] = ("UP")
-			buffs["growth-x"] = ("LEFT")
-			
-			self.Buffs = buffs
-		end
-		if (playerShowDebuffs) then
-			local debuffs = CreateFrame("Frame", nil, self)
-			debuffs:SetPoint("TOPLEFT", self.Power, "BOTTOMLEFT", 0,-28-GAP)
-			debuffs:SetPoint("TOPRIGHT", self.Power, "BOTTOMRIGHT",0,-28-GAP)
-			debuffs:SetHeight(24)
-			debuffs:SetWidth(width)
-			debuffs.size = math.floor(debuffs:GetHeight())
-			debuffs.num = math.floor(width / debuffs.size + .5)
-			debuffs.spacing = 2
-			debuffs.initialAnchor = ("BOTTOMRIGHT")
-			debuffs["growth-y"] = ("DOWN")
-			debuffs["growth-x"] = ("LEFT")
-			
-			self.Debuffs = debuffs
-		end
-		
+
 		if (playerClass == "DEATHKNIGHT") then
 			if oUFRuneBar == true then
 				self:SetAttribute("initial-height", height-7)
@@ -260,7 +231,7 @@ local UnitSpecific = {
 				end
 				
 				self.Runes = runes
-				GAP = 11
+				RUNEBARGAP = 11
 			end
 		end
 		
@@ -302,8 +273,8 @@ local UnitSpecific = {
 		
 		if(IsAddOnLoaded"oUF_Experience" and UnitLevel("player") ~= MAX_PLAYER_LEVEL) then
 			self.Experience = CreateFrame("StatusBar", nil, self)
-			self.Experience:SetPoint("TOPLEFT", self.Power, "BOTTOMLEFT", 0,-2-GAP)
-			self.Experience:SetPoint("TOPRIGHT", self.Power, "BOTTOMRIGHT",0,-2-GAP)
+			self.Experience:SetPoint("TOPLEFT", self.Power, "BOTTOMLEFT", 0,-2-RUNEBARGAP)
+			self.Experience:SetPoint("TOPRIGHT", self.Power, "BOTTOMRIGHT",0,-2-RUNEBARGAP)
 			self.Experience:SetHeight(13)
 			self.Experience:SetStatusBarTexture(TEXTURE)
 			self.Experience:SetFrameStrata("LOW")
@@ -314,10 +285,11 @@ local UnitSpecific = {
 			self.Experience:SetBackdrop(backdrop)
 			self.Experience:SetBackdropColor(0, 0, 0, .9)
 			self.Experience:SetAlpha(0.8)
+			EXPREPBARGAP = 21
 		elseif (IsAddOnLoaded"oUF_Reputation" and UnitLevel("player") == MAX_PLAYER_LEVEL) then
 			self.Reputation = CreateFrame("StatusBar", nil, self)
-			self.Reputation:SetPoint("TOPLEFT", self.Power, "BOTTOMLEFT", 0,-2-GAP)
-			self.Reputation:SetPoint("TOPRIGHT", self.Power, "BOTTOMRIGHT",0,-2-GAP)
+			self.Reputation:SetPoint("TOPLEFT", self.Power, "BOTTOMLEFT", 0,-2-RUNEBARGAP)
+			self.Reputation:SetPoint("TOPRIGHT", self.Power, "BOTTOMRIGHT",0,-2-RUNEBARGAP)
 			self.Reputation:SetHeight(13)
 			self.Reputation:SetStatusBarTexture(TEXTURE)
 			self.Reputation.PostUpdate = PostUpdateReputation
@@ -329,11 +301,41 @@ local UnitSpecific = {
 			self.Reputation:SetBackdrop(backdrop)
 			self.Reputation:SetBackdropColor(0, 0, 0, .9)
 			self.Reputation:SetAlpha(0.8)
+			EXPREPBARGAP = 21
+		end
+		if (playerShowBuffs) then
+			local buffs = CreateFrame("Frame", nil, self)
+			buffs:SetPoint("BOTTOMRIGHT", hp, "TOPRIGHT",0,3)
+			buffs:SetHeight(24)
+			buffs:SetWidth(width)
+			buffs.num = 20
+			buffs.size = 24
+			buffs.spacing = 1
+			buffs.initialAnchor = ("TOPRIGHT")
+			buffs["growth-y"] = ("UP")
+			buffs["growth-x"] = ("LEFT")
+			
+			self.Buffs = buffs
+		end
+		if (playerShowDebuffs) then
+			local debuffs = CreateFrame("Frame", nil, self)
+			debuffs:SetPoint("TOPLEFT", self.Power, "BOTTOMLEFT", 0,-EXPREPBARGAP-RUNEBARGAP)
+			debuffs:SetPoint("TOPRIGHT", self.Power, "BOTTOMRIGHT",0,-EXPREPBARGAP-RUNEBARGAP)
+			debuffs:SetHeight(24)
+			debuffs:SetWidth(width)
+			debuffs.size = math.floor(debuffs:GetHeight())
+			debuffs.num = math.floor(width / debuffs.size + .5)
+			debuffs.spacing = 2
+			debuffs.initialAnchor = ("BOTTOMRIGHT")
+			debuffs["growth-y"] = ("DOWN")
+			debuffs["growth-x"] = ("LEFT")
+			
+			self.Debuffs = debuffs
 		end
 		if playerCastBar then
 			local cb = CreateFrame("StatusBar", nil, self)
-			cb:SetPoint("TOPLEFT", self.Power, "BOTTOMLEFT", 0, -2-GAP)
-			cb:SetPoint("TOPRIGHT", self.Power, "BOTTOMRIGHT", 0, -2-GAP)
+			cb:SetPoint("TOPLEFT", self.Power, "BOTTOMLEFT", 0, -2-RUNEBARGAP)
+			cb:SetPoint("TOPRIGHT", self.Power, "BOTTOMRIGHT", 0, -2-RUNEBARGAP)
 			cb:SetBackdrop(backdrop)
 			cb:SetBackdropColor(0, 0, 0, .9)
 			cb:SetToplevel(true)
@@ -414,7 +416,7 @@ local UnitSpecific = {
 		end
 		if (targetShowDebuffs) then
 			local debuffs = CreateFrame("Frame", nil, self)
-			debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT",0,-20)
+			debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT",0,-EXPREPBARGAP)
 			debuffs:SetHeight(24)
 			debuffs:SetWidth(width)
 			debuffs.size = math.floor(debuffs:GetHeight())
