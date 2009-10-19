@@ -350,10 +350,10 @@ local UnitSpecific = {
 		local hp, pp = self.Health, self.Power
 		if (petShowAura) then
 			self.Auras = CreateFrame("Frame", nil, self)
-			self.Auras:SetPoint("TOPRIGHT", self, "TOPLEFT", -2, 1)
+			self.Auras:SetPoint("TOPRIGHT", self, "TOPLEFT", -3, 0)
 			self.Auras:SetHeight(hp:GetHeight() + pp:GetHeight())
-			self.Auras:SetWidth(270)
-			self.Auras.size = 20
+			self.Auras:SetWidth(self:GetAttribute("initial-width"))
+			self.Auras.size = self:GetAttribute("initial-height")
 			self.Auras.spacing = 2
 			self.Auras.initialAnchor = "TOPRIGHT"
 			self.Auras["growth-x"] = "LEFT"
