@@ -1,3 +1,8 @@
+--[[-------------------------------------------------------------------------
+  Lasse G. Brun grants anyone the right to use this work for any purpose,
+  without any conditions, unless such conditions are required by law.
+---------------------------------------------------------------------------]]
+
 local oUF_Brun = {
 -- (point , frame , relativePoint , x , y)
 	Player = {"RIGHT", UIParent, "CENTER", -98, -340},
@@ -15,6 +20,7 @@ local oUFRuneBar = false -- Enable/Disable the runebars in oUF.
 local removeBuffs = false -- Enable/Disable blizzard default buff frame.
 local hideSelfInfo = true -- Enable/Disable name and level info on playerframe when at max level.
 local hidePartyInRaid = true -- Enable/Disable party frames in raid.
+
 local FONT, FONT_SIZE, SMALL_FONT_SIZE = ("Interface\\Addons\\oUF_Brun\\textures\\Font.ttf"), 14, 13
 local TEXTURE = ("Interface\\Addons\\oUF_Brun\\textures\\Statusbar")
 local HIGHLIGHT = ("Interface\\QuestFrame\\UI-QuestTitleHighlight")
