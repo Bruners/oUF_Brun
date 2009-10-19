@@ -688,7 +688,7 @@ local Shared = function(self, unit)
 	info:SetTextColor(1, 1, 1)
 
 	self.Info = info
-	self:Tag(info, "L[difficulty][level]|cffffffff[shortclassification] [smrtrace]|r")
+	self:Tag(info, "L[difficulty][level]|cffffffff[shortclassification] [smarterrace]|r")
 
 	local hl = self:CreateTexture(nil, "HIGHLIGHT")
 	hl:SetPoint("TOP", 0, -1)
