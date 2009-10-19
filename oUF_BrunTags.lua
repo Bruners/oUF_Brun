@@ -59,8 +59,8 @@ end
 oUF.Tags["[brunhppp]"] = function(u)
 	local hp =  UnitHealth(u) or 0
 	local pp = UnitPower(u) or 0
-	if hp and pp then
-		return string.format("%s | %s", siValue(pp), siValue(hp))
+	if hp or pp then
+		return string.format("%s | %s", pp, hp)
 	end
 end
 oUF.Tags["[brunminushp]"] = function(u)
@@ -85,13 +85,13 @@ oUF.Tags["[ShortName]"] = function(u)
 end
 oUF.Tags["[NormalName]"] = function(u)
 	local name = UnitName(u)
-	return utf8sub(name, 25, true)
+	return utf8sub(name, 27, true)
 end
 
 oUF.Tags["[afkdnd]"] = function(u)
 	if u then return UnitIsAFK(u) and "|cffffff00<A>|r" or UnitIsDND(u) and "|cffffff00<D>|r" end
 end
-oUF.Tags["[smrtrace]"] = function(u)
+oUF.Tags["[smarterrace]"] = function(u)
 	if u then return (UnitIsPlayer(u) and UnitRace(u)) or UnitCreatureFamily(u) or UnitCreatureType(u) end
 end
 
@@ -100,7 +100,7 @@ oUF.Tags["[difficulty]"] = function(u)
 end
 
 oUF.TagEvents["[happiness]"] = "UNIT_HAPPINESS"
-oUF.TagEvents["[smrtrace]"] = "PLAYER_TARGET_CHANGED"
+oUF.TagEvents["[smarterrace]"] = "PLAYER_TARGET_CHANGED"
 oUF.TagEvents["[ShortName]"] = "UNIT_NAME_UPDATE"
 oUF.TagEvents["[NormalName]"] = "UNIT_NAME_UPDATE"
 oUF.TagEvents["[afkdnd]"] = "PLAYER_FLAGS_CHANGED"

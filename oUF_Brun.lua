@@ -675,7 +675,6 @@ local Shared = function(self, unit)
 	name:SetPoint("LEFT", 2, 0)
 	name:SetJustifyH"LEFT"
 	name:SetFont(FONT, FONT_SIZE , "OUTLINE")
-	name:SetWidth(150)
 	name:SetHeight(12)
 
 	self.Name = name
