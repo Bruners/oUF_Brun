@@ -12,16 +12,16 @@ local oUF_Brun = {
 }
 
 local oUFRuneBar = false -- Enable/Disable the runebars in oUF.
-local removeBuffs = false -- Removes blizzard buffs.
-local hideSelfInfo = true -- Hides name and level info on playerframe.
-
+local removeBuffs = false -- Enable/Disable blizzard default buff frame.
+local hideSelfInfo = true -- Enable/Disable name and level info on playerframe when at max level.
+local hidePartyInRaid = true -- Enable/Disable party frames in raid.
 local FONT, FONT_SIZE, SMALL_FONT_SIZE = ("Interface\\Addons\\oUF_Brun\\textures\\Font.ttf"), 14, 13
 local TEXTURE = ("Interface\\Addons\\oUF_Brun\\textures\\Statusbar")
 local HIGHLIGHT = ("Interface\\QuestFrame\\UI-QuestTitleHighlight")
 local COMBO = ("Interface\\Addons\\oUF_Brun\\textures\\pb4combo")
-local GAP = 0
 
-local height, width = 35, 252
+local height, width = 35, 252 -- Default frame height and width used by several frames.
+
 local playerShowBuffs = true  -- Enable/disable uffs on player.
 local playerShowDebuffs = true  -- Enable/disable debuffs on player.
 local playerCastBar = true -- Enable/Disable castbar on player.
@@ -30,24 +30,27 @@ local targetShowBuffs = true  -- Enable/disable buffs on target.
 local targetShowDebuffs = true  -- Enable/disable debuffs on target.
 local targetCastBar = true -- Enable/Disable castbar on target.
 
-local petHeight, petWidth = 15, 152
+local targetTargetHeight, targetTargetWidth = height-10, width-85 -- Target's target height and width.
+
+local petHeight, petWidth = 15, 152 -- Player pet height and width.
 local petShowAura = true  -- Enable/disable aura on pet.
 local petCastBar = true -- Enable/disable castbar on pet.
 
-local targetTargetHeight, targetTargetWidth = height-10, width-85
-
-local focusHeight, focusWidth = 20, 200
+local focusHeight, focusWidth = 20, 200 -- Foucs height and width.
 local focusShowBuffs = true  -- Enable/disable buffs on focus.
 local focusShowDebuffs = true  -- Enable/disable debuffs on focus.
 local focusCastBar = true -- Enable/Disable castbar on focus.
 
-local partyHeight, partyWidth = height, width-50
+local partyHeight, partyWidth = height, width-50 -- Party height and width.
 local partyShowBuffs = true  -- Enable/disable buffs on party.
 local partyShowDebuffs = true  -- Enable/disable debuffs on party.
 
+local partyPetAndTargetHeight = 15 -- Party target and party pet height.
+local partyPetAndTargetWidth = 95 -- Party target and party pet width.
+
 local substr = string.sub
 local _, playerClass = UnitClass("player")
-
+local GAP = 0
 local backdrop = {
 	bgFile="Interface\\Tooltips\\UI-Tooltip-Background",
 	tile = true, 
@@ -438,8 +441,8 @@ local UnitSpecific = {
 			self.PvP:SetWidth(15)
 			self.PvP:SetPoint("TOPRIGHT", 10, 10)
 			self:Tag(self.Health.Text, "[brunminushp]")
-			self:SetAttribute("initial-height", 15)
-			self:SetAttribute("initial-width", 95)
+			self:SetAttribute("initial-height", partyPetAndTargetHeight)
+			self:SetAttribute("initial-width", partyPetAndTargetWidth)
 			self.Health:SetHeight(self:GetAttribute("initial-height"))
 		else
 			if (partyShowBuffs) then
@@ -467,6 +470,8 @@ local UnitSpecific = {
 				self.Debuffs["growth-y"] = "DOWN"
 				self.Debuffs.filter = false
 			end
+			self:SetAttribute("initial-height", partyHeight)
+			self:SetAttribute("initial-width", partyWidth)
 		end
 		self.Range = true
 		self.inRangeAlpha = 1
@@ -745,8 +750,12 @@ partyToggle:SetScript("OnEvent", function(self)
 	else
 		self:UnregisterEvent("PLAYER_REGEN_ENABLED")
 		local numraid = GetNumRaidMembers()
-		if numraid > 0 then
-			party:Hide()
+		if hidePartyInRaid then
+			if numraid > 0 then
+				party:Hide()
+			else
+				party:Show()
+			end
 		else
 			party:Show()
 		end
