@@ -344,14 +344,16 @@ local UnitSpecific = {
 		self.Health.colorHappiness = true
 		self.Health:SetHeight(self:GetAttribute("initial-height")*0.8)
 		self.Power:SetHeight(self:GetAttribute("initial-height")*0.2)
-		self:Tag(self.Health.Text, "[brunminushp]")
+		self:Tag(self.Health.value, "[brunhppp]")
+		self.Info:Hide()
+		self.Power.value:Hide()
 		local hp, pp = self.Health, self.Power
 		if (petShowAura) then
 			self.Auras = CreateFrame("Frame", nil, self)
 			self.Auras:SetPoint("TOPRIGHT", self, "TOPLEFT", -2, 1)
 			self.Auras:SetHeight(hp:GetHeight() + pp:GetHeight())
 			self.Auras:SetWidth(270)
-			self.Auras.size = 24
+			self.Auras.size = 20
 			self.Auras.spacing = 2
 			self.Auras.initialAnchor = "TOPRIGHT"
 			self.Auras["growth-x"] = "LEFT"

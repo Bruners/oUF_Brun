@@ -56,6 +56,13 @@ oUF.Tags["[brunhp]"] = function(u)
 		return m == 0 and 0 or (not UnitIsFriend("player", u) and string.format("%s | %d%%", siValue(n),n/m*100)) or m ~=  n and string.format("|cffff8585-%s|r  %s/%s", siValue(m - n), siValue(n),siValue(m)) or n == m and m
 	end
 end
+oUF.Tags["[brunhppp]"] = function(u)
+	local hp =  UnitHealth(u) or 0
+	local pp = UnitPower(u) or 0
+	if hp and pp then
+		return string.format("%s | %s", siValue(hp), siValue(pp))
+	end
+end
 oUF.Tags["[brunminushp]"] = function(u)
 	local m, n = UnitHealthMax(u), UnitHealth(u)
 	if m then
@@ -100,3 +107,4 @@ oUF.TagEvents["[afkdnd]"] = "PLAYER_FLAGS_CHANGED"
 oUF.TagEvents["[brunhp]"] = "UNIT_HEALTH UNIT_MAXHEALTH"
 oUF.TagEvents["[brunminushp]"] = "UNIT_HEALTH UNIT_MAXHEALTH"
 oUF.TagEvents["[brunpp]"] = "UNIT_MAXENERGY UNIT_MAXFOCUS UNIT_MAXMANA UNIT_MAXRAGE UNIT_ENERGY UNIT_FOCUS UNIT_MANA UNIT_RAGE UNIT_MAXRUNIC_POWER UNIT_RUNIC_POWER"
+oUF.TagEvents["[brunhppp]"] = "UNIT_HEALTH UNIT_ENERGY UNIT_FOCUS UNIT_MANA UNIT_RAGE UNIT_RUNIC_POWER"
