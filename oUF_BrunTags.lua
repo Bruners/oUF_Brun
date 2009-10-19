@@ -60,7 +60,7 @@ oUF.Tags["[brunhppp]"] = function(u)
 	local hp =  UnitHealth(u) or 0
 	local pp = UnitPower(u) or 0
 	if hp and pp then
-		return string.format("%s | %s", siValue(hp), siValue(pp))
+		return string.format("%s | %s", siValue(pp), siValue(hp))
 	end
 end
 oUF.Tags["[brunminushp]"] = function(u)
