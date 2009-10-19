@@ -107,6 +107,12 @@ local function PostUpdateReputation(self, event, unit, bar)
 	bar:SetStatusBarColor(FACTION_BAR_COLORS[id].r, FACTION_BAR_COLORS[id].g, FACTION_BAR_COLORS[id].b)
 end
 
+local function updateCPoints(self, event, unit)
+	if unit == PlayerFrame.unit and unit ~= self.CPoints.unit then
+		self.CPoints.unit = unit
+	end
+end
+
 local function PostCreateAuraIcon(self, button, icons)
 	icons.showDebuffType = true
 	icons.gap = 1
@@ -193,25 +199,20 @@ end
 
 local UnitSpecific = {
 	player = function(self)
-		
-		local infoliner = self.Health:CreateFontString(nil, "OVERLAY")
-		infoliner:SetFont(FONT, FONT_SIZE , "OUTLINE")
-		infoliner:SetJustifyH"LEFT"
-		infoliner:SetPoint("TOP", hp, "CENTER")
-		
-		local combat = self.Power:CreateTexture(nil, "OVERLAY")
+		local hp, pp = self.Health, self.Power
+		local combat = pp:CreateTexture(nil, "OVERLAY")
 		combat:SetHeight(17)
 		combat:SetWidth(17)
-		combat:SetPoint("BOTTOMLEFT", self.Power, -8,-5)
+		combat:SetPoint("BOTTOMLEFT", pp, -8,-5)
 		combat:SetTexCoord(0.58, 0.90, 0.08, 0.41)
-		
+
 		self.Combat = combat
 
 		if (playerClass == "DEATHKNIGHT") then
 			if oUFRuneBar == true then
 				self:SetAttribute("initial-height", height-7)
-				self.Power:SetHeight(height*0.4 -7)
-				self.Power.value:SetFont(FONT, SMALL_FONT_SIZE , "OUTLINE")
+				pp:SetHeight(height*0.4 -7)
+				pp.value:SetFont(FONT, SMALL_FONT_SIZE , "OUTLINE")
 				
 				local runes = CreateFrame('Frame', nil, self)
 				runes:SetPoint('TOPLEFT', self, 'BOTTOMLEFT', 0, -5)
@@ -234,7 +235,7 @@ local UnitSpecific = {
 				RUNEBARGAP = 11
 			end
 		end
-		
+
 		if(playerClass == "DRUID") then
 			self.DruidPower = CreateFrame("StatusBar", nil, self)
 			self.DruidPower:SetPoint("TOP", self.Castbar, "BOTTOM")
@@ -250,9 +251,9 @@ local UnitSpecific = {
 			self.DruidPower.Text:SetPoint("CENTER", self.DruidPower)
 			self.DruidPower.Text:SetTextColor(oUF.colors.power["MANA"])
 		end
-		
+
 		if UnitLevel("player") ~= MAX_PLAYER_LEVEL then
-			local resting = self.Power:CreateTexture(nil, "OVERLAY")
+			local resting = pp:CreateTexture(nil, "OVERLAY")
 			resting:SetHeight(20)
 			resting:SetWidth(25)
 			resting:SetPoint("BOTTOMLEFT", -15, -10)
@@ -265,16 +266,16 @@ local UnitSpecific = {
 				self:Tag(self.Name, "[afkdnd]")
 			end
 		end	
-	
+
 		if(IsAddOnLoaded"oUF_CombatFeedback") then
 			self.CombatFeedbackText = infoliner
 			self.CombatFeedbackText.maxAlpha = .8
 		end
-		
+
 		if(IsAddOnLoaded"oUF_Experience" and UnitLevel("player") ~= MAX_PLAYER_LEVEL) then
 			self.Experience = CreateFrame("StatusBar", nil, self)
-			self.Experience:SetPoint("TOPLEFT", self.Power, "BOTTOMLEFT", 0,-2-RUNEBARGAP)
-			self.Experience:SetPoint("TOPRIGHT", self.Power, "BOTTOMRIGHT",0,-2-RUNEBARGAP)
+			self.Experience:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-2-RUNEBARGAP)
+			self.Experience:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-2-RUNEBARGAP)
 			self.Experience:SetHeight(13)
 			self.Experience:SetStatusBarTexture(TEXTURE)
 			self.Experience:SetFrameStrata("LOW")
@@ -288,8 +289,8 @@ local UnitSpecific = {
 			EXPREPBARGAP = 21
 		elseif (IsAddOnLoaded"oUF_Reputation" and UnitLevel("player") == MAX_PLAYER_LEVEL) then
 			self.Reputation = CreateFrame("StatusBar", nil, self)
-			self.Reputation:SetPoint("TOPLEFT", self.Power, "BOTTOMLEFT", 0,-2-RUNEBARGAP)
-			self.Reputation:SetPoint("TOPRIGHT", self.Power, "BOTTOMRIGHT",0,-2-RUNEBARGAP)
+			self.Reputation:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-2-RUNEBARGAP)
+			self.Reputation:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-2-RUNEBARGAP)
 			self.Reputation:SetHeight(13)
 			self.Reputation:SetStatusBarTexture(TEXTURE)
 			self.Reputation.PostUpdate = PostUpdateReputation
@@ -314,13 +315,13 @@ local UnitSpecific = {
 			buffs.initialAnchor = ("TOPRIGHT")
 			buffs["growth-y"] = ("UP")
 			buffs["growth-x"] = ("LEFT")
-			
+
 			self.Buffs = buffs
 		end
 		if (playerShowDebuffs) then
 			local debuffs = CreateFrame("Frame", nil, self)
-			debuffs:SetPoint("TOPLEFT", self.Power, "BOTTOMLEFT", 0,-EXPREPBARGAP-RUNEBARGAP)
-			debuffs:SetPoint("TOPRIGHT", self.Power, "BOTTOMRIGHT",0,-EXPREPBARGAP-RUNEBARGAP)
+			debuffs:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-EXPREPBARGAP-RUNEBARGAP)
+			debuffs:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-EXPREPBARGAP-RUNEBARGAP)
 			debuffs:SetHeight(24)
 			debuffs:SetWidth(width)
 			debuffs.size = math.floor(debuffs:GetHeight())
@@ -329,29 +330,29 @@ local UnitSpecific = {
 			debuffs.initialAnchor = ("BOTTOMRIGHT")
 			debuffs["growth-y"] = ("DOWN")
 			debuffs["growth-x"] = ("LEFT")
-			
+
 			self.Debuffs = debuffs
 		end
 		if playerCastBar then
 			local cb = CreateFrame("StatusBar", nil, self)
-			cb:SetPoint("TOPLEFT", self.Power, "BOTTOMLEFT", 0, -2-RUNEBARGAP)
-			cb:SetPoint("TOPRIGHT", self.Power, "BOTTOMRIGHT", 0, -2-RUNEBARGAP)
+			cb:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -2-RUNEBARGAP)
+			cb:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT", 0, -2-RUNEBARGAP)
 			cb:SetBackdrop(backdrop)
 			cb:SetBackdropColor(0, 0, 0, .9)
 			cb:SetToplevel(true)
 			cb:SetStatusBarTexture(TEXTURE)
 			cb:SetStatusBarColor(1.0, 0.7, 0.0)
 			cb:SetHeight(14)
-			
+
 			self.Castbar = cb
 			castbarStyle(cb)
 		end
 	end,
-	
+
 	pet = function(self)
 		self:SetAttribute("initial-height", petHeight)
 		self:SetAttribute("initial-width", petWidth)
-		
+
 		self.Health.colorHappiness = true
 		self.Health:SetHeight(self:GetAttribute("initial-height")*0.8)
 		self.Power:SetHeight(self:GetAttribute("initial-height")*0.2)
@@ -369,7 +370,7 @@ local UnitSpecific = {
 			self.Auras.initialAnchor = "TOPRIGHT"
 			self.Auras["growth-x"] = "LEFT"
 		end
-		
+
 		if petCastBar then
 			local cb = CreateFrame("StatusBar", nil, self)
 			cb:SetStatusBarTexture(TEXTURE)
@@ -379,17 +380,41 @@ local UnitSpecific = {
 
 			self.Castbar = cb
 		end
-		
+
 		if(playerClass == "HUNTER") then
 			self:Tag(self.Name, "[happiness]")
 		end
 	end,
 
 	target = function(self)
+		local hp, pp = self.Health, self.Power
+		self.CPoints = {}
+		self.CPoints.unit = 'player'
+		for i = 1, 5 do
+			self.CPoints[i] = pp:CreateTexture(nil, 'OVERLAY')
+			self.CPoints[i]:SetHeight(10)
+			self.CPoints[i]:SetWidth(10)
+			self.CPoints[i]:SetTexture(COMBO)
+			if(i==1) then
+				self.CPoints[i]:SetPoint("CENTER", pp, "CENTER", 30, -1)
+				self.CPoints[i]:SetVertexColor(1,84/255,0)
+			else
+				self.CPoints[i]:SetPoint("RIGHT", self.CPoints[i-1], "LEFT", -2, 0)
+				self.CPoints[i]:SetWidth(10+(i*0.5))
+				self.CPoints[i]:SetHeight(10+(i*0.5))
+			end
+		end
+		self.CPoints[2]:SetVertexColor(1,162/255,0)
+		self.CPoints[3]:SetVertexColor(1,246/255,0)
+		self.CPoints[4]:SetVertexColor(204/255,1,0)
+		self.CPoints[5]:SetVertexColor(76/255,236/255,0)
+
+		self:RegisterEvent("UNIT_COMBO_POINTS", updateCPoints)
+
 		if targetCastBar then
 			local cb = CreateFrame("StatusBar", nil, self)
-			cb:SetPoint("TOPLEFT", self.Power, "BOTTOMLEFT", 0, -2)
-			cb:SetPoint("TOPRIGHT", self.Power, "BOTTOMRIGHT", 0, -2)
+			cb:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -2)
+			cb:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT", 0, -2)
 			cb:SetBackdrop(backdrop)
 			cb:SetBackdropColor(0, 0, 0, .9)
 			cb:SetToplevel(true)
@@ -580,7 +605,7 @@ local Shared = function(self, unit)
 
 	hp.value = hpp
 	self:Tag(hpp, "[brunhp]")
-	
+
 	local pp = CreateFrame("StatusBar", nil, self)
 	pp:SetPoint("TOPRIGHT", hp, "BOTTOMRIGHT", 0, -1)
 	pp:SetPoint("TOPLEFT", hp, "BOTTOMLEFT", 0, -1)
@@ -596,6 +621,13 @@ local Shared = function(self, unit)
 
 	self.Power = pp
 
+	local infoliner = self.Health:CreateFontString(nil, "OVERLAY")
+	infoliner:SetFont(FONT, FONT_SIZE , "OUTLINE")
+	infoliner:SetJustifyH"LEFT"
+	infoliner:SetPoint("TOP", hp, "CENTER")
+		
+	self.Infoliner = infoliner
+	
 	local ppbg = pp:CreateTexture(nil, "BORDER")
 	ppbg:SetAllPoints(pp)
 	ppbg:SetTexture(TEXTURE)
@@ -669,45 +701,6 @@ local Shared = function(self, unit)
 	hl:SetTexture(HIGHLIGHT)
 
 	self.Highlight = hl
-
-	local cparr = {}
-	cparr[1] = pp:CreateTexture(nil, "OVERLAY")
-	cparr[1]:SetHeight(10)
-	cparr[1]:SetWidth(10)
-	cparr[1]:SetPoint("BOTTOMRIGHT", pp, "BOTTOMRIGHT", 0, -1)
-	cparr[1]:SetTexture(COMBO)
-	cparr[1]:SetVertexColor(1,84/255,0)
-
-	cparr[2] = pp:CreateTexture(nil, "OVERLAY")
-	cparr[2]:SetHeight(10)
-	cparr[2]:SetWidth(10)
-	cparr[2]:SetPoint("RIGHT", cparr[1], "LEFT", -2, 0)
-	cparr[2]:SetTexture(COMBO)
-	cparr[2]:SetVertexColor(1,162/255,0)
-
-	cparr[3] = pp:CreateTexture(nil, "OVERLAY")
-	cparr[3]:SetHeight(10)
-	cparr[3]:SetWidth(10)
-	cparr[3]:SetPoint("RIGHT", cparr[2], "LEFT", -2, 0)
-	cparr[3]:SetTexture(COMBO)
-	cparr[3]:SetVertexColor(1,246/255,0)
-
-	cparr[4] = pp:CreateTexture(nil, "OVERLAY")
-	cparr[4]:SetHeight(10)
-	cparr[4]:SetWidth(10)
-	cparr[4]:SetPoint("RIGHT", cparr[3], "LEFT", -2, 0)
-	cparr[4]:SetTexture(COMBO)
-	cparr[4]:SetVertexColor(204/255,1,0)
-
-	cparr[5] = pp:CreateTexture(nil, "OVERLAY")
-	cparr[5]:SetHeight(10)
-	cparr[5]:SetWidth(10)
-	cparr[5]:SetPoint("RIGHT", cparr[4], "LEFT", -2, 0)
-	cparr[5]:SetTexture(COMBO)
-	cparr[5]:SetVertexColor(76/255,236/255,0)
-
-	self.CPoints = cparr
-	self:Tag(infoliner, "[cpoints]")
 
 	self.PostCreateAuraIcon = PostCreateAuraIcon
 
