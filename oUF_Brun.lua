@@ -19,7 +19,7 @@ local oUF_Brun = {
 local oUFRuneBar = false -- Enable/Disable the runebars in oUF.
 local removeBuffs = false -- Enable/Disable blizzard default buff frame.
 local hideSelfInfo = true -- Enable/Disable name and level info on playerframe when at max level.
-local hidePartyInRaid = true -- Enable/Disable party frames in raid.
+local hidePartyInRaid = false -- Enable/Disable party frames in raid.
 
 local FONT, FONT_SIZE, SMALL_FONT_SIZE = ("Interface\\Addons\\oUF_Brun\\textures\\Font.ttf"), 14, 13
 local TEXTURE = ("Interface\\Addons\\oUF_Brun\\textures\\Statusbar")
@@ -473,7 +473,8 @@ local UnitSpecific = {
 			self.PvP:SetHeight(15)
 			self.PvP:SetWidth(15)
 			self.PvP:SetPoint("TOPRIGHT", 10, 10)
-			self:Tag(self.Health.Text, "[brunminushp]")
+			self:Tag(self.Name, "[ShortName]")
+			self:Tag(hp.value, "[brunminushp]")
 			self:SetAttribute("initial-height", partyPetAndTargetHeight)
 			self:SetAttribute("initial-width", partyPetAndTargetWidth)
 			self.Health:SetHeight(self:GetAttribute("initial-height"))
