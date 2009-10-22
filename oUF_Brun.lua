@@ -16,43 +16,63 @@ local oUF_Brun = {
 	Runeframe = {"TOPLEFT", "oUF_player", "BOTTOMLEFT", 0, -20}, -- Coords for the blizzard runes
 }
 
-local oUFRuneBar = false -- Enable/Disable the runebars in oUF.
-local removeBuffs = false -- Enable/Disable blizzard default buff frame.
-local hideSelfInfo = true -- Enable/Disable name and level info on playerframe when at max level.
-local hidePartyInRaid = false -- Enable/Disable party frames in raid.
+local oUFRuneBar = false							-- Enable/Disable the rune bar delivered by oUF.
+local removeBuffs = false							-- Enable/Disable blizzard default buff frame.
+local hideSelfInfo = true							-- Enable/Disable name and level info on playerframe when at max level.
+local hidePartyInRaid = false						-- Enable/Disable party frames in raid.
 
-local FONT, FONT_SIZE, SMALL_FONT_SIZE = ("Interface\\Addons\\oUF_Brun\\textures\\Font.ttf"), 14, 13
+local FONT_SIZE = 14								-- Largest font on frames ( most frames )
+local SMALL_FONT_SIZE = 13							-- Smallest font on frames ( target's target )
+
+local FONT = ("Interface\\Addons\\oUF_Brun\\textures\\Font.ttf")
 local TEXTURE = ("Interface\\Addons\\oUF_Brun\\textures\\Statusbar")
 local HIGHLIGHT = ("Interface\\QuestFrame\\UI-QuestTitleHighlight")
 local COMBO = ("Interface\\Addons\\oUF_Brun\\textures\\pb4combo")
 
-local height, width = 35, 252 -- Default frame height and width used by several frames.
+local height, width = 35, 252						-- Default frame height and width used by several frames.
 
-local playerShowBuffs = true  -- Enable/disable uffs on player.
-local playerShowDebuffs = true  -- Enable/disable debuffs on player.
-local playerCastBar = true -- Enable/Disable castbar on player.
+local playerShowBuffs = true						-- Enable/disable uffs on player.
+local playerShowDebuffs = true						-- Enable/disable debuffs on player.
+local playerBuffsSize = 23							-- Size of players buffs.
+local playerDebuffSize = 23							-- Size of players debuffs.
+local playerBuffSpacing = 2							-- Buff spacing
+local playerDebuffSpacing = 2						-- Debuff spacing
+local playerCastBar = true							-- Enable/Disable castbar on player.
 
-local targetShowBuffs = true  -- Enable/disable buffs on target.
-local targetShowDebuffs = true  -- Enable/disable debuffs on target.
-local targetCastBar = true -- Enable/Disable castbar on target.
+local targetShowBuffs = true						-- Enable/disable buffs on target.
+local targetShowDebuffs = true						-- Enable/disable debuffs on target.
+local targetBuffSize = 23							-- Size of targets buffs.
+local targetDebuffSize = 23							-- Size of targets debuffs.
+local targetBuffSpacing = 2							-- Buff spacing
+local targetDebuffSpacing = 2						-- Debuff spacing
+local targetCastBar = true							-- Enable/Disable castbar on target.
 
-local targetTargetHeight, targetTargetWidth = height-10, width-85 -- Target's target height and width.
+local targetTargetHeight = height-10				-- Target's target height.
+local targetTargetWidth = width-85 					-- Target's target width.
 
-local petHeight, petWidth = 15, 152 -- Player pet height and width.
-local petShowAura = true  -- Enable/disable aura on pet.
-local petCastBar = true -- Enable/disable castbar on pet.
+local petHeight, petWidth = 15, 152					-- Player pet height and width.
+local petShowAura = true							-- Enable/disable aura on pet.
+local petCastBar = true								-- Enable/disable castbar on pet.
 
-local focusHeight, focusWidth = 20, 200 -- Foucs height and width.
-local focusShowBuffs = true  -- Enable/disable buffs on focus.
-local focusShowDebuffs = true  -- Enable/disable debuffs on focus.
-local focusCastBar = true -- Enable/Disable castbar on focus.
+local focusHeight, focusWidth = 20, 200				-- Foucs height and width.
+local focusShowBuffs = true							-- Enable/disable buffs on focus.
+local focusShowDebuffs = true						-- Enable/disable debuffs on focus.
+local focusBuffSize = 20							-- Size of focus buffs.
+local focusDebuffSize = 20							-- Size of focus debuffs.
+local focusBuffSpacing = 2							-- Buff spacing
+local focusDebuffSpacing = 2						-- Debuff spacing
+local focusCastBar = true							-- Enable/Disable castbar on focus.
 
-local partyHeight, partyWidth = height, width-50 -- Party height and width.
-local partyShowBuffs = true  -- Enable/disable buffs on party.
-local partyShowDebuffs = true  -- Enable/disable debuffs on party.
+local partyHeight, partyWidth = height, width-50	-- Party height and width.
+local partyShowBuffs = true							-- Enable/disable buffs on party.
+local partyShowDebuffs = true						-- Enable/disable debuffs on party.
+local partyBuffSize = 17							-- Size of party buffs.
+local partyDebuffSize = 17							-- Size of party debuffs.
+local partyBuffSpacing = 2							-- Debuff spacing
+local partyDebuffSpacing = 2						-- Debuff spacing
 
-local partyPetAndTargetHeight = 15 -- Party target and party pet height.
-local partyPetAndTargetWidth = 95 -- Party target and party pet width.
+local partyPetAndTargetHeight = 15					-- Party target and party pet height.
+local partyPetAndTargetWidth = 95					-- Party target and party pet width.
 
 local substr = string.sub
 local _, playerClass = UnitClass("player")
@@ -306,12 +326,12 @@ local UnitSpecific = {
 		end
 		if (playerShowBuffs) then
 			local buffs = CreateFrame("Frame", nil, self)
-			buffs:SetPoint("BOTTOMRIGHT", hp, "TOPRIGHT",0,3)
-			buffs:SetHeight(24)
+			buffs:SetPoint("BOTTOMRIGHT", hp, "TOPRIGHT",0,0)
+			buffs:SetHeight(playerBuffsSize)
 			buffs:SetWidth(width)
-			buffs.num = 20
-			buffs.size = 24
-			buffs.spacing = 1
+			buffs.size = math.floor(buffs:GetHeight())
+			buffs.num = math.floor(width / buffs.size + .5)
+			buffs.spacing = playerBuffSpacing
 			buffs.initialAnchor = ("TOPRIGHT")
 			buffs["growth-y"] = ("UP")
 			buffs["growth-x"] = ("LEFT")
@@ -322,11 +342,11 @@ local UnitSpecific = {
 			local debuffs = CreateFrame("Frame", nil, self)
 			debuffs:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-EXPREPBARGAP-RUNEBARGAP)
 			debuffs:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-EXPREPBARGAP-RUNEBARGAP)
-			debuffs:SetHeight(24)
+			debuffs:SetHeight(playerDebuffSize)
 			debuffs:SetWidth(width)
 			debuffs.size = math.floor(debuffs:GetHeight())
 			debuffs.num = math.floor(width / debuffs.size + .5)
-			debuffs.spacing = 2
+			debuffs.spacing = playerDebuffSpacing
 			debuffs.initialAnchor = ("BOTTOMRIGHT")
 			debuffs["growth-y"] = ("DOWN")
 			debuffs["growth-x"] = ("LEFT")
@@ -428,11 +448,11 @@ local UnitSpecific = {
 		if (targetShowBuffs) then
 			local buffs = CreateFrame("Frame", nil, self)
 			buffs:SetPoint("BOTTOMRIGHT", self, "TOPRIGHT",0,3)
-			buffs:SetHeight(24)
+			buffs:SetHeight(targetBuffSize)
 			buffs:SetWidth(width)
-			buffs.num = 20
-			buffs.size = 24
-			buffs.spacing = 1
+			buffs.size = math.floor(buffs:GetHeight())
+			buffs.num = math.floor(width / buffs.size + .5)
+			buffs.spacing = targetBuffSpacing
 			buffs.initialAnchor = ("TOPRIGHT")
 			buffs["growth-y"] = ("UP")
 			buffs["growth-x"] = ("LEFT")
@@ -442,11 +462,11 @@ local UnitSpecific = {
 		if (targetShowDebuffs) then
 			local debuffs = CreateFrame("Frame", nil, self)
 			debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT",0,-EXPREPBARGAP)
-			debuffs:SetHeight(24)
+			debuffs:SetHeight(targetDebuffSize)
 			debuffs:SetWidth(width)
 			debuffs.size = math.floor(debuffs:GetHeight())
 			debuffs.num = math.floor(width / debuffs.size + .5)
-			debuffs.spacing = 2
+			debuffs.spacing = targetDebuffSpacing
 			debuffs.initialAnchor = ("BOTTOMLEFT")
 			debuffs["growth-y"] = ("DOWN")
 			debuffs["growth-x"] = ("RIGHT")
@@ -482,11 +502,11 @@ local UnitSpecific = {
 			if (partyShowBuffs) then
 				self.Buffs = CreateFrame("Frame", nil, self)
 				self.Buffs:SetPoint("BOTTOMLEFT", self, "TOPLEFT", 0, 2)
-				self.Buffs:SetHeight(17)
-				self.Buffs:SetWidth(width-50)
-				self.Buffs.spacing = 4
+				self.Buffs:SetHeight(partyBuffSize)
+				self.Buffs:SetWidth(partyWidth)
+				self.Buffs.spacing = partyBuffSpacing
 				self.Buffs.size = math.floor(self.Buffs:GetHeight() + .8)
-				self.Buffs.num = math.floor(width / self.Buffs.size + .5)
+				self.Buffs.num = math.floor(partyWidth / self.Buffs.size + .5)
 				self.Buffs.initialAnchor = "BOTTOMLEFT"
 				self.Buffs["growth-y"] = "UP"
 				self.Buffs["growth-x"] = "RIGHT"
@@ -494,11 +514,11 @@ local UnitSpecific = {
 			if (partyShowBuffs) then
 				self.Debuffs = CreateFrame("Frame", nil, self)
 				self.Debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT",0,-4)
-				self.Debuffs:SetHeight(17)
-				self.Debuffs:SetWidth(self:GetAttribute("initial-width")-50)
-				self.Debuffs.spacing = 4
+				self.Debuffs:SetHeight(partyDebuffSize)
+				self.Debuffs:SetWidth(partyWidth)
+				self.Debuffs.spacing = partyDebuffSpacing
 				self.Debuffs.size = math.floor(self.Debuffs:GetHeight() + .5)
-				self.Debuffs.num = math.floor(width / self.Debuffs.size + .5)
+				self.Debuffs.num = math.floor(partyWidth / self.Debuffs.size + .5)
 				self.Debuffs.initialAnchor = "BOTTOMLEFT"
 				self.Debuffs["growth-x"] = "RIGHT"
 				self.Debuffs["growth-y"] = "DOWN"
@@ -527,11 +547,11 @@ local UnitSpecific = {
 		if (focusShowBuffs) then
 			local buffs = CreateFrame("Frame", nil, self)
 			buffs:SetPoint("BOTTOMRIGHT", self, "TOPRIGHT",0,3)
-			buffs:SetHeight(24)
-			buffs:SetWidth(width)
-			buffs.num = 20
-			buffs.size = 24
-			buffs.spacing = 1
+			buffs:SetHeight(focusBuffSize)
+			buffs:SetWidth(focusWidth)
+			buffs.size = math.floor(buffs:GetHeight())
+			buffs.num = math.floor(focusWidth / buffs.size + .5)
+			buffs.spacing = focusBuffSpacing
 			buffs.initialAnchor = ("TOPRIGHT")
 			buffs["growth-y"] = ("UP")
 			buffs["growth-x"] = ("LEFT")
@@ -542,11 +562,11 @@ local UnitSpecific = {
 		if (focusShowDebuffs) then
 			local debuffs = CreateFrame("Frame", nil, self)
 			debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT",0,-5)
-			debuffs:SetHeight(24)
-			debuffs:SetWidth(width)
+			debuffs:SetHeight(focusDebuffSize)
+			debuffs:SetWidth(focusWidth)
 			debuffs.size = math.floor(debuffs:GetHeight())
-			debuffs.num = math.floor(width / debuffs.size + .5)
-			debuffs.spacing = 2
+			debuffs.num = math.floor(focusWidth / debuffs.size + .5)
+			debuffs.spacing = focusDebuffSpacing
 			debuffs.initialAnchor = ("BOTTOMLEFT")
 			debuffs["growth-y"] = ("DOWN")
 			debuffs["growth-x"] = ("RIGHT")
@@ -611,7 +631,6 @@ local Shared = function(self, unit)
 	pp:SetPoint("TOPRIGHT", hp, "BOTTOMRIGHT", 0, -1)
 	pp:SetPoint("TOPLEFT", hp, "BOTTOMLEFT", 0, -1)
 	pp:SetStatusBarTexture(TEXTURE)
-	pp:SetStatusBarColor(.25, .25, .35)
 	pp:SetHeight(self:GetAttribute("initial-height")*0.4)
 	pp.frequentUpdates = true
 	pp.colorDisconnected = true
