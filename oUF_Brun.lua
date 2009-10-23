@@ -472,7 +472,6 @@ local UnitSpecific = {
 			debuffs["growth-x"] = ("RIGHT")
 
 			self.Debuffs = debuffs
-			self.PostUpdateAuraIcon = PostUpdateAuraIcon
 		end
 	end,
 	targettarget = function(self)
@@ -572,7 +571,6 @@ local UnitSpecific = {
 			debuffs["growth-x"] = ("RIGHT")
 
 			self.Debuffs = debuffs
-			self.PostUpdateAuraIcon = PostUpdateAuraIcon
 		end
 	end,
 }
@@ -584,6 +582,7 @@ local Shared = function(self, unit)
 	self.menu = menu
 	self.BarFade = true
 	self.MoveableFrames = true
+	self.DebuffHighlightBackdrop = true
 
 	self:SetScript("OnEnter", UnitFrame_OnEnter)
 	self:SetScript("OnLeave", UnitFrame_OnLeave)
@@ -722,7 +721,8 @@ local Shared = function(self, unit)
 	self.Highlight = hl
 
 	self.PostCreateAuraIcon = PostCreateAuraIcon
-
+	self.PostUpdateAuraIcon = PostUpdateAuraIcon
+	
 	-- Small hacks are always allowed...
 	local unit = unit or 'party'
 	if(UnitSpecific[unit]) then
