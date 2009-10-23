@@ -298,8 +298,14 @@ local UnitSpecific = {
 			self.Experience:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-2-RUNEBARGAP)
 			self.Experience:SetHeight(13)
 			self.Experience:SetStatusBarTexture(TEXTURE)
-			self.Experience:SetFrameStrata("LOW")
+			self.Experience:SetStatusBarColor(0, 0.4, 1, 1)
 			self.Experience.Tooltip = true
+
+			self.Experience.Rested = CreateFrame('StatusBar', nil, self)
+			self.Experience.Rested:SetAllPoints(self.Experience)
+			self.Experience.Rested:SetStatusBarTexture(TEXTURE)
+			self.Experience.Rested:SetStatusBarColor(0, 0.4, 1, 0.7)
+
 			self.Experience.Text = self.Experience:CreateFontString(nil, "OVERLAY")
 			self.Experience.Text:SetFont(FONT, SMALL_FONT_SIZE , "OUTLINE")
 			self.Experience.Text:SetPoint("CENTER", self.Experience)
