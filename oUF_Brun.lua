@@ -680,6 +680,13 @@ local Shared = function(self, unit)
 
 	self.MasterLooter = masterlooter
 
+	local assistant = self:CreateTexture(nil, "OVERLAY")
+	assistant:SetHeight(16)
+	assistant:SetWidth(16)
+	assistant:SetPoint('LEFT', masterlooter, 'RIGHT')
+	
+	self.Assistant = assistant
+
 	local ricon = hp:CreateTexture(nil, "OVERLAY")
 	ricon:SetHeight(16)
 	ricon:SetWidth(16)
