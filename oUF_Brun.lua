@@ -5,8 +5,8 @@
 
 local oUF_Brun = {
 -- (point , frame , relativePoint , x , y)
-	Player = {"RIGHT", UIParent, "CENTER", -98, -340},
-	Target = {"LEFT", UIParent, "CENTER", 98, -340},
+	Player = {"RIGHT", UIParent, "CENTER", -100, -340},
+	Target = {"LEFT", UIParent, "CENTER", 100, -340},
 	Pet = {"RIGHT", "oUF_player", "LEFT", -25, 0},
 	Focus = {"TOP", UIParent, "TOP", 300,-30},
 	FocusTarget = {"TOP", "oUF_Focus", "BOTTOM", 0,-30},
@@ -22,7 +22,7 @@ local hideSelfInfo = true							-- Enable/Disable name and level info on playerf
 local hidePartyInRaid = false						-- Enable/Disable party frames in raid.
 
 local FONT_SIZE = 14								-- Largest font on frames ( most frames )
-local SMALL_FONT_SIZE = 13							-- Smallest font on frames ( target's target )
+local SMALL_FONT_SIZE = 12							-- Smallest font on frames ( target's target )
 
 local FONT = ("Interface\\Addons\\oUF_Brun\\textures\\Font.ttf")
 local TEXTURE = ("Interface\\Addons\\oUF_Brun\\textures\\Statusbar")
@@ -33,16 +33,16 @@ local height, width = 35, 252						-- Default frame height and width used by sev
 
 local playerShowBuffs = true						-- Enable/disable uffs on player.
 local playerShowDebuffs = true						-- Enable/disable debuffs on player.
-local playerBuffsSize = 23							-- Size of players buffs.
-local playerDebuffSize = 23							-- Size of players debuffs.
-local playerBuffSpacing = 2							-- Buff spacing
+local playerBuffsSize = 25							-- Size of players buffs.
+local playerDebuffSize = 25							-- Size of players debuffs.
+local playerBuffSpacing = 3							-- Buff spacing
 local playerDebuffSpacing = 2						-- Debuff spacing
 local playerCastBar = true							-- Enable/Disable castbar on player.
 
 local targetShowBuffs = true						-- Enable/disable buffs on target.
 local targetShowDebuffs = true						-- Enable/disable debuffs on target.
-local targetBuffSize = 23							-- Size of targets buffs.
-local targetDebuffSize = 23							-- Size of targets debuffs.
+local targetBuffSize = 26							-- Size of targets buffs.
+local targetDebuffSize = 26							-- Size of targets debuffs.
 local targetBuffSpacing = 2							-- Buff spacing
 local targetDebuffSpacing = 2						-- Debuff spacing
 local targetCastBar = true							-- Enable/Disable castbar on target.
@@ -81,7 +81,7 @@ local EXPREPBARGAP = 21
 local backdrop = {
 	bgFile="Interface\\Tooltips\\UI-Tooltip-Background",
 	tile = true, 
-	insets ={left = -2, right = -2, top = -2, bottom = -3}
+	insets ={left = -1, right = -1, top = -1, bottom = -1}
 }
 
 oUF.colors.power["MANA"] = {48/255, 113/255, 191/255}
