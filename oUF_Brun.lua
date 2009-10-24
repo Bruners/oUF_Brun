@@ -5,13 +5,13 @@
 
 local oUF_Brun = {
 -- (point , frame , relativePoint , x , y)
-	Player = {"RIGHT", UIParent, "CENTER", -100, -340},
-	Target = {"LEFT", UIParent, "CENTER", 100, -340},
+	Player = {"RIGHT", UIParent, "CENTER", -98, -340},
+	Target = {"LEFT", UIParent, "CENTER", 98, -340},
 	Pet = {"RIGHT", "oUF_player", "LEFT", -25, 0},
 	Focus = {"TOP", UIParent, "TOP", 300,-30},
 	FocusTarget = {"TOP", "oUF_Focus", "BOTTOM", 0,-30},
-	ToT = {"LEFT", "oUF_player", "RIGHT", 17, 5},
-	ToToT = {"LEFT", "oUF_player", "RIGHT", 17, -28},
+	ToT = {"LEFT", "oUF_player", "RIGHT", 14, 5},
+	ToToT = {"LEFT", "oUF_player", "RIGHT", 14, -28},
 	Party = {"TOPLEFT", UIParent, "TOPLEFT", 20, -50},
 	Runeframe = {"TOPLEFT", "oUF_player", "BOTTOMLEFT", 0, -20}, -- Coords for the blizzard runes
 }
@@ -33,16 +33,16 @@ local height, width = 35, 252						-- Default frame height and width used by sev
 
 local playerShowBuffs = true						-- Enable/disable uffs on player.
 local playerShowDebuffs = true						-- Enable/disable debuffs on player.
-local playerBuffsSize = 25							-- Size of players buffs.
-local playerDebuffSize = 25							-- Size of players debuffs.
-local playerBuffSpacing = 3							-- Buff spacing
+local playerBuffsSize = 23							-- Size of players buffs.
+local playerDebuffSize = 23							-- Size of players debuffs.
+local playerBuffSpacing = 2							-- Buff spacing
 local playerDebuffSpacing = 2						-- Debuff spacing
 local playerCastBar = true							-- Enable/Disable castbar on player.
 
 local targetShowBuffs = true						-- Enable/disable buffs on target.
 local targetShowDebuffs = true						-- Enable/disable debuffs on target.
-local targetBuffSize = 26							-- Size of targets buffs.
-local targetDebuffSize = 26							-- Size of targets debuffs.
+local targetBuffSize = 23							-- Size of targets buffs.
+local targetDebuffSize = 23							-- Size of targets debuffs.
 local targetBuffSpacing = 2							-- Buff spacing
 local targetDebuffSpacing = 2						-- Debuff spacing
 local targetCastBar = true							-- Enable/Disable castbar on target.
@@ -81,7 +81,7 @@ local EXPREPBARGAP = 21
 local backdrop = {
 	bgFile="Interface\\Tooltips\\UI-Tooltip-Background",
 	tile = true, 
-	insets ={left = -1, right = -1, top = -1, bottom = -1}
+	insets ={left = -2, right = -2, top = -2, bottom = -2}
 }
 
 oUF.colors.power["MANA"] = {48/255, 113/255, 191/255}
@@ -201,7 +201,7 @@ local function castbarStyle(cb)
 	cb.Text = cbtext
 
 	local cbicon = cb:CreateTexture(nil, "OVERLAY")
-	cbicon:SetHeight(cb:GetHeight()-1)
+	cbicon:SetHeight(cb:GetHeight()+1)
 	cbicon:SetWidth(cb:GetHeight()+1)
 	cbicon:SetTexCoord(0.07, .93, .07, .93)
 	cbicon:SetPoint("TOPLEFT", cb, "TOPLEFT", -2, 0)
@@ -277,8 +277,6 @@ local UnitSpecific = {
 			resting:SetHeight(20)
 			resting:SetWidth(25)
 			resting:SetPoint("BOTTOMLEFT", -15, -10)
-			resting:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
-			resting:SetTexCoord(0, 0.5, 0, 0.42)
 			self.Resting = resting
 		else
 			if (hideSelfInfo == true) then
@@ -332,7 +330,7 @@ local UnitSpecific = {
 		end
 		if (playerShowBuffs) then
 			local buffs = CreateFrame("Frame", nil, self)
-			buffs:SetPoint("BOTTOMRIGHT", hp, "TOPRIGHT",0,0)
+			buffs:SetPoint("BOTTOMRIGHT", hp, "TOPRIGHT",0,1)
 			buffs:SetHeight(playerBuffsSize)
 			buffs:SetWidth(width)
 			buffs.size = math.floor(buffs:GetHeight())
@@ -453,7 +451,7 @@ local UnitSpecific = {
 		end
 		if (targetShowBuffs) then
 			local buffs = CreateFrame("Frame", nil, self)
-			buffs:SetPoint("BOTTOMRIGHT", self, "TOPRIGHT",0,3)
+			buffs:SetPoint("BOTTOMRIGHT", self, "TOPRIGHT",0,1)
 			buffs:SetHeight(targetBuffSize)
 			buffs:SetWidth(width)
 			buffs.size = math.floor(buffs:GetHeight())
