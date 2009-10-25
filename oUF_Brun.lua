@@ -8,7 +8,7 @@ local oUF_Brun = {
 	Player = {"RIGHT", UIParent, "CENTER", -98, -340},
 	Target = {"LEFT", UIParent, "CENTER", 98, -340},
 	Pet = {"RIGHT", "oUF_player", "LEFT", -25, 0},
-	Focus = {"TOP", UIParent, "TOP", 300,-30},
+	Focus = {"TOP", UIParent, "TOP", 250,-30},
 	FocusTarget = {"TOP", "oUF_Focus", "BOTTOM", 0,-30},
 	ToT = {"LEFT", "oUF_player", "RIGHT", 14, 5},
 	ToToT = {"LEFT", "oUF_player", "RIGHT", 14, -28},
@@ -22,7 +22,7 @@ local hideSelfInfo = true							-- Enable/Disable name and level info on playerf
 local hidePartyInRaid = false						-- Enable/Disable party frames in raid.
 
 local FONT_SIZE = 14								-- Largest font on frames ( most frames )
-local SMALL_FONT_SIZE = 12							-- Smallest font on frames ( target's target )
+local SMALL_FONT_SIZE = 12							-- Smallest font on frames ( target"s target )
 
 local FONT = ("Interface\\Addons\\oUF_Brun\\textures\\Font.ttf")
 local TEXTURE = ("Interface\\Addons\\oUF_Brun\\textures\\Statusbar")
@@ -234,8 +234,8 @@ local UnitSpecific = {
 				pp:SetHeight(height*0.4 -7)
 				pp.value:SetFont(FONT, SMALL_FONT_SIZE , "OUTLINE")
 				
-				local runes = CreateFrame('Frame', nil, self)
-				runes:SetPoint('TOPLEFT', self, 'BOTTOMLEFT', 0, -5)
+				local runes = CreateFrame("Frame", nil, self)
+				runes:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -5)
 				runes:SetHeight(7)
 				runes:SetWidth(width)
 				runes:SetBackdrop(backdrop)
@@ -245,7 +245,7 @@ local UnitSpecific = {
 				runes.width = width / 6 - 0.75
 
 				for i = 1, 6 do
-					local bar = CreateFrame('StatusBar', nil, runes)
+					local bar = CreateFrame("StatusBar", nil, runes)
 					bar:SetStatusBarTexture(TEXTURE)
 					
 					runes[i] = bar
@@ -299,7 +299,7 @@ local UnitSpecific = {
 			self.Experience:SetStatusBarColor(0, 0.4, 1, 1)
 			self.Experience.Tooltip = true
 
-			self.Experience.Rested = CreateFrame('StatusBar', nil, self)
+			self.Experience.Rested = CreateFrame("StatusBar", nil, self)
 			self.Experience.Rested:SetAllPoints(self.Experience)
 			self.Experience.Rested:SetStatusBarTexture(TEXTURE)
 			self.Experience.Rested:SetStatusBarColor(0, 0.4, 1, 0.7)
@@ -413,9 +413,9 @@ local UnitSpecific = {
 	target = function(self)
 		local hp, pp = self.Health, self.Power
 		self.CPoints = {}
-		self.CPoints.unit = 'player'
+		self.CPoints.unit = "player"
 		for i = 1, 5 do
-			self.CPoints[i] = pp:CreateTexture(nil, 'OVERLAY')
+			self.CPoints[i] = pp:CreateTexture(nil, "OVERLAY")
 			self.CPoints[i]:SetHeight(10)
 			self.CPoints[i]:SetWidth(10)
 			self.CPoints[i]:SetTexture(COMBO)
@@ -644,7 +644,7 @@ local Shared = function(self, unit)
 
 	self.Power = pp
 
-	local infoliner = self.Health:CreateFontString(nil, "OVERLAY")
+	local infoliner = hp:CreateFontString(nil, "OVERLAY")
 	infoliner:SetFont(FONT, FONT_SIZE , "OUTLINE")
 	infoliner:SetJustifyH"LEFT"
 	infoliner:SetPoint("TOP", hp, "CENTER")
@@ -666,31 +666,31 @@ local Shared = function(self, unit)
 	pp.value = ppp
 	self:Tag(ppp, "[brunpp]")
 
-	local leader = self:CreateTexture(nil, "OVERLAY")
+	local leader = hp:CreateTexture(nil, "OVERLAY")
 	leader:SetHeight(16)
 	leader:SetWidth(16)
-	leader:SetPoint("BOTTOM", hp, "TOP", 0, -5)
+	leader:SetPoint("TOP", hp, "TOP")
 
 	self.Leader = leader
 
-	local masterlooter = self:CreateTexture(nil, 'OVERLAY')
+	local masterlooter = hp:CreateTexture(nil, "OVERLAY")
 	masterlooter:SetHeight(16)
 	masterlooter:SetWidth(16)
-	masterlooter:SetPoint('LEFT', leader, 'RIGHT')
+	masterlooter:SetPoint("LEFT", leader, "RIGHT")
 
 	self.MasterLooter = masterlooter
 
-	local assistant = self:CreateTexture(nil, "OVERLAY")
+	local assistant = hp:CreateTexture(nil, "OVERLAY")
 	assistant:SetHeight(16)
 	assistant:SetWidth(16)
-	assistant:SetPoint('LEFT', masterlooter, 'RIGHT')
+	assistant:SetPoint("TOP", hp, "TOP")
 	
 	self.Assistant = assistant
 
 	local ricon = hp:CreateTexture(nil, "OVERLAY")
-	ricon:SetHeight(16)
-	ricon:SetWidth(16)
-	ricon:SetPoint('LEFT', masterlooter, 'RIGHT')
+	ricon:SetHeight(13)
+	ricon:SetWidth(13)
+	ricon:SetPoint("RIGHT", leader, "LEFT")
 
 	self.RaidIcon = ricon
 
@@ -735,7 +735,7 @@ local Shared = function(self, unit)
 	self.PostUpdateAuraIcon = PostUpdateAuraIcon
 	
 	-- Small hacks are always allowed...
-	local unit = unit or 'party'
+	local unit = unit or "party"
 	if(UnitSpecific[unit]) then
 		return UnitSpecific[unit](self)
 	end
