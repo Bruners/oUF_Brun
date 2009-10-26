@@ -537,9 +537,11 @@ local UnitSpecific = {
 		self.outsideRangeAlpha = .5
 	end,
 	focus = function(self)
+		local hp, pp = self.Health, self.Power
 		self:SetAttribute("initial-height", focusHeight)
 		self:SetAttribute("initial-width", focusWidth)
-
+		hp:SetHeight(self:GetAttribute("initial-height")*0.6)
+		pp:SetHeight(self:GetAttribute("initial-height")*0.4)
 		if focusCastBar then
 			local cb = CreateFrame("StatusBar", nil, self)
 			cb:SetStatusBarTexture(TEXTURE)
