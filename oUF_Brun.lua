@@ -22,7 +22,7 @@ local hideSelfInfo = true							-- Enable/Disable name and level info on playerf
 local hidePartyInRaid = false						-- Enable/Disable party frames in raid.
 
 local FONT_SIZE = 14								-- Largest font on frames ( most frames )
-local SMALL_FONT_SIZE = 12							-- Smallest font on frames ( target"s target )
+local SMALL_FONT_SIZE = 12							-- Smallest font on frames ( target's target )
 
 local FONT = ("Interface\\Addons\\oUF_Brun\\textures\\Font.ttf")
 local TEXTURE = ("Interface\\Addons\\oUF_Brun\\textures\\Statusbar")
@@ -748,7 +748,7 @@ oUF:SetActiveStyle"Brun"
 oUF:Spawn("player", "oUF_player"):SetPoint(unpack(oUF_Brun.Player))
 oUF:Spawn("target", "oUF_target"):SetPoint(unpack(oUF_Brun.Target))
 oUF:Spawn("targettarget", "oUF_TargetTarget"):SetPoint(unpack(oUF_Brun.ToT))
-oUF:Spawn("targettargettarget"):SetPoint(unpack(oUF_Brun.ToToT))
+oUF:Spawn("targettargettarget", "oUF_ToToT"):SetPoint(unpack(oUF_Brun.ToToT))
 oUF:Spawn("focus", "oUF_Focus"):SetPoint(unpack(oUF_Brun.Focus))
 --oUF:Spawn("focustarget"):SetPoint(unpack(oUF_Brun.FocusTarget))
 oUF:Spawn("pet", "oUF_Pet"):SetPoint(unpack(oUF_Brun.Pet))
