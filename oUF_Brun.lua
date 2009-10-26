@@ -77,6 +77,7 @@ local partyPetAndTargetWidth = 95					-- Party target and party pet width.
 local substr = string.sub
 local _, playerClass = UnitClass("player")
 local RUNEBARGAP = 0
+local TOTEMBARGAP = 0
 local EXPREPBARGAP = 21
 local backdrop = {
 	bgFile="Interface\\Tooltips\\UI-Tooltip-Background",
@@ -230,12 +231,8 @@ local UnitSpecific = {
 
 		if (playerClass == "DEATHKNIGHT") then
 			if oUFRuneBar == true then
-				self:SetAttribute("initial-height", height-7)
-				pp:SetHeight(height*0.4 -7)
-				pp.value:SetFont(FONT, SMALL_FONT_SIZE , "OUTLINE")
-				
 				local runes = CreateFrame("Frame", nil, self)
-				runes:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -5)
+				runes:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -3)
 				runes:SetHeight(7)
 				runes:SetWidth(width)
 				runes:SetBackdrop(backdrop)
@@ -289,11 +286,40 @@ local UnitSpecific = {
 			self.CombatFeedbackText = self.Infoliner
 			self.CombatFeedbackText.maxAlpha = .8
 		end
+		
+		if IsAddOnLoaded("oUF_TotemBar") and playerClass == "SHAMAN" then
+			self.TotemBar = {}
+			for i = 1, 4 do
+				self.TotemBar[i] = CreateFrame("StatusBar", nil, self)
+				self.TotemBar[i]:SetHeight(7)
+				self.TotemBar[i]:SetWidth((width/4))
+				if (i == 1) then
+					self.TotemBar[i]:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -3)
+				else
+					self.TotemBar[i]:SetPoint("TOPLEFT", self.TotemBar[i-1], "TOPRIGHT")
+				end
+				self.TotemBar[i]:SetStatusBarTexture(TEXTURE)
+				self.TotemBar[i]:SetBackdrop(backdrop)
+				self.TotemBar[i]:SetBackdropColor(0, 0, 0, .9)
+				self.TotemBar[i]:SetMinMaxValues(0, 1)
 
+				self.TotemBar[i].bg = self.TotemBar[i]:CreateTexture(nil, "BORDER")
+				self.TotemBar[i].bg:SetAllPoints(self.TotemBar[i])
+				self.TotemBar[i].bg:SetTexture(TEXTURE)
+				self.TotemBar[i].bg.multiplier = 0.25
+
+				self.TotemBar[i].Name = self.TotemBar[i]:CreateFontString(nil, 'OVERLAY')
+				self.TotemBar[i].Name:SetFont(FONT, SMALL_FONT_SIZE , "OUTLINE")
+				self.TotemBar[i].Name:SetJustifyH('LEFT')
+				self.TotemBar[i].Name:SetPoint("LEFT",self.TotemBar[i],"LEFT",1,0)
+			end
+			TOTEMBARGAP = 11
+		end
+		
 		if(IsAddOnLoaded"oUF_Experience" and UnitLevel("player") ~= MAX_PLAYER_LEVEL) then
 			self.Experience = CreateFrame("StatusBar", nil, self)
-			self.Experience:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-2-RUNEBARGAP)
-			self.Experience:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-2-RUNEBARGAP)
+			self.Experience:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-2-RUNEBARGAP-TOTEMBARGAP)
+			self.Experience:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-2-RUNEBARGAP-TOTEMBARGAP)
 			self.Experience:SetHeight(13)
 			self.Experience:SetStatusBarTexture(TEXTURE)
 			self.Experience:SetStatusBarColor(0, 0.4, 1, 1)
@@ -313,8 +339,8 @@ local UnitSpecific = {
 			EXPREPBARGAP = 21
 		elseif (IsAddOnLoaded"oUF_Reputation" and UnitLevel("player") == MAX_PLAYER_LEVEL) then
 			self.Reputation = CreateFrame("StatusBar", nil, self)
-			self.Reputation:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-2-RUNEBARGAP)
-			self.Reputation:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-2-RUNEBARGAP)
+			self.Reputation:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-2-RUNEBARGAP-TOTEMBARGAP)
+			self.Reputation:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-2-RUNEBARGAP-TOTEMBARGAP)
 			self.Reputation:SetHeight(13)
 			self.Reputation:SetStatusBarTexture(TEXTURE)
 			self.Reputation.PostUpdate = PostUpdateReputation
@@ -344,8 +370,8 @@ local UnitSpecific = {
 		end
 		if (playerShowDebuffs) then
 			local debuffs = CreateFrame("Frame", nil, self)
-			debuffs:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-EXPREPBARGAP-RUNEBARGAP)
-			debuffs:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-EXPREPBARGAP-RUNEBARGAP)
+			debuffs:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-EXPREPBARGAP-RUNEBARGAP-TOTEMBARGAP)
+			debuffs:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-EXPREPBARGAP-RUNEBARGAP-TOTEMBARGAP)
 			debuffs:SetHeight(playerDebuffSize)
 			debuffs:SetWidth(width)
 			debuffs.size = math.floor(debuffs:GetHeight())
@@ -359,8 +385,8 @@ local UnitSpecific = {
 		end
 		if playerCastBar then
 			local cb = CreateFrame("StatusBar", nil, self)
-			cb:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -2-RUNEBARGAP)
-			cb:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT", 0, -2-RUNEBARGAP)
+			cb:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -2-RUNEBARGAP-TOTEMBARGAP)
+			cb:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT", 0, -2-RUNEBARGAP-TOTEMBARGAP)
 			cb:SetBackdrop(backdrop)
 			cb:SetBackdropColor(0, 0, 0, .9)
 			cb:SetToplevel(true)
@@ -486,8 +512,8 @@ local UnitSpecific = {
 		hp.value:SetFont(FONT, SMALL_FONT_SIZE , "OUTLINE")
 		pp.value:SetFont(FONT, SMALL_FONT_SIZE , "OUTLINE")
 		self.Info:SetFont(FONT, SMALL_FONT_SIZE , "OUTLINE")
-		self.Health:SetHeight(self:GetAttribute("initial-height")*0.6)
-		self.Power:SetHeight(self:GetAttribute("initial-height")*0.4)
+		hp:SetHeight(self:GetAttribute("initial-height")*0.6)
+		hp:SetHeight(self:GetAttribute("initial-height")*0.4)
 	end,
 	party = function(self)
 		local hp, pp = self.Health, self.Power
@@ -500,7 +526,7 @@ local UnitSpecific = {
 			self:Tag(hp.value, "[brunminushp]")
 			self:SetAttribute("initial-height", partyPetAndTargetHeight)
 			self:SetAttribute("initial-width", partyPetAndTargetWidth)
-			self.Health:SetHeight(self:GetAttribute("initial-height"))
+			hp:SetHeight(self:GetAttribute("initial-height"))
 		else
 			if (partyShowBuffs) then
 				self.Buffs = CreateFrame("Frame", nil, self)
