@@ -529,6 +529,8 @@ local UnitSpecific = {
 			end
 			self:SetAttribute("initial-height", partyHeight)
 			self:SetAttribute("initial-width", partyWidth)
+			hp:SetHeight(self:GetAttribute("initial-height")*0.6)
+			pp:SetHeight(self:GetAttribute("initial-height")*0.4)
 		end
 		self.Range = true
 		self.inRangeAlpha = 1
