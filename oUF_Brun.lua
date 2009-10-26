@@ -780,7 +780,7 @@ oUF:Spawn("target", "oUF_target"):SetPoint(unpack(oUF_Brun.Target))
 oUF:Spawn("targettarget", "oUF_TargetTarget"):SetPoint(unpack(oUF_Brun.ToT))
 oUF:Spawn("targettargettarget", "oUF_ToToT"):SetPoint(unpack(oUF_Brun.ToToT))
 oUF:Spawn("focus", "oUF_Focus"):SetPoint(unpack(oUF_Brun.Focus))
---oUF:Spawn("focustarget"):SetPoint(unpack(oUF_Brun.FocusTarget))
+--oUF:Spawn("focustarget", "oUF_FocusTarget"):SetPoint(unpack(oUF_Brun.FocusTarget))
 oUF:Spawn("pet", "oUF_Pet"):SetPoint(unpack(oUF_Brun.Pet))
 
 if(oUFRuneBar == false and playerClass == "DEATHKNIGHT") then
