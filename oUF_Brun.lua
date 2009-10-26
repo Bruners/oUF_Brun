@@ -286,7 +286,7 @@ local UnitSpecific = {
 		end	
 
 		if(IsAddOnLoaded"oUF_CombatFeedback") then
-			self.CombatFeedbackText = infoliner
+			self.CombatFeedbackText = self.Infoliner
 			self.CombatFeedbackText.maxAlpha = .8
 		end
 
