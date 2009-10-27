@@ -277,10 +277,10 @@ local UnitSpecific = {
 				for i = 1, 6 do
 					local bar = CreateFrame("StatusBar", nil, runes)
 					bar:SetStatusBarTexture(TEXTURE)
-					
+
 					runes[i] = bar
 				end
-				
+
 				self.Runes = runes
 				MODULEGAP = 11
 			end
@@ -297,10 +297,14 @@ local UnitSpecific = {
 			self.DruidPower:RegisterEvent("UNIT_MANA")
 			self.DruidPower:RegisterEvent("UNIT_ENERGY")
 			self.DruidPower:RegisterEvent("PLAYER_LOGIN")
-			self.DruidPower.Text = self.DruidPower:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+			self.DruidPower.Text = self.DruidPower:CreateFontString(nil, "OVERLAY")
+			self.DruidPower.Text:SetFont(FONT, SMALL_FONT_SIZE , "OUTLINE")
 			self.DruidPower.Text:SetPoint("CENTER", self.DruidPower)
-			self.DruidPower.Text:SetTextColor(oUF.colors.power["MANA"])
-			
+			self.DruidPower.Text:SetTextColor(1, 1, 1)
+			self.DruidPower:SetBackdrop(backdrop)
+			self.DruidPower:SetBackdropColor(0, 0, 0, .9)
+			self.DruidPower:SetAlpha(0.8)
+
 			MODULEGAP = 11
 		end
 
@@ -768,7 +772,6 @@ local Shared = function(self, unit)
 	name:SetPoint("LEFT", 2, 0)
 	name:SetJustifyH"LEFT"
 	name:SetFont(FONT, FONT_SIZE , "OUTLINE")
-	name:SetHeight(12)
 
 	self.Name = name
 	self:Tag(name, "[NormalName] [afkdnd]")
