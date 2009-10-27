@@ -76,8 +76,7 @@ local partyPetAndTargetWidth = 95					-- Party target and party pet width.
 
 local substr = string.sub
 local _, playerClass = UnitClass("player")
-local RUNEBARGAP = 0
-local TOTEMBARGAP = 0
+local MODULEGAP = 0
 local EXPREPBARGAP = 21
 local backdrop = {
 	bgFile="Interface\\Tooltips\\UI-Tooltip-Background",
@@ -112,6 +111,40 @@ local menu = function(self)
 		ToggleDropDownMenu(1, nil, _G["PartyMemberFrame"..self.id.."DropDown"], "cursor", 0, 0)
 	elseif(_G[cunit.."FrameDropDown"]) then
 		ToggleDropDownMenu(1, nil, _G[cunit.."FrameDropDown"], "cursor", 0, 0)
+	end
+end
+
+local manamin, manamax, ptype
+local function UpdateDruidPower(self)
+	local ptype = UnitPowerType("player")
+	if(ptype ~= 0) then
+		manamin = UnitPower("player", 0)
+		manamax = UnitPowerMax("player", 0)
+
+		self:SetMinMaxValues(0, manamax)
+		self:SetValue(manamin)
+		self:SetStatusBarColor(unpack(self.colors.power["MANA"]))
+
+		if(manamin ~= manamax) then
+			self.Text:SetFormattedText("%d - %d%%", manamin, math.floor(manamin / manamax * 100))
+		else
+			self.Text:SetText()
+		end
+
+		self:SetAlpha(1)
+	else
+		manamin = UnitPower("player", 3)
+		manamax = UnitPowerMax("player", 3)
+
+		self:SetStatusBarColor(unpack(self.colors.power["ENERGY"]))
+		self.Text:SetText()
+
+		if(manamin ~= manamax) then
+			self:SetMinMaxValues(0, manamax)
+			self:SetValue(manamin)
+		else
+			self:SetAlpha(0)
+		end
 	end
 end
 
@@ -249,15 +282,15 @@ local UnitSpecific = {
 				end
 				
 				self.Runes = runes
-				RUNEBARGAP = 11
+				MODULEGAP = 11
 			end
 		end
 
 		if(playerClass == "DRUID") then
 			self.DruidPower = CreateFrame("StatusBar", nil, self)
-			self.DruidPower:SetPoint("TOP", self.Castbar, "BOTTOM")
+			self.DruidPower:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -3)
 			self.DruidPower:SetStatusBarTexture(TEXTURE)
-			self.DruidPower:SetHeight(1)
+			self.DruidPower:SetHeight(7)
 			self.DruidPower:SetWidth(width)
 			self.DruidPower.colors = self.colors
 			self.DruidPower:SetScript("OnEvent", UpdateDruidPower)
@@ -267,6 +300,8 @@ local UnitSpecific = {
 			self.DruidPower.Text = self.DruidPower:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 			self.DruidPower.Text:SetPoint("CENTER", self.DruidPower)
 			self.DruidPower.Text:SetTextColor(oUF.colors.power["MANA"])
+			
+			MODULEGAP = 11
 		end
 
 		if UnitLevel("player") ~= MAX_PLAYER_LEVEL then
@@ -313,13 +348,12 @@ local UnitSpecific = {
 				self.TotemBar[i].Name:SetJustifyH('LEFT')
 				self.TotemBar[i].Name:SetPoint("LEFT",self.TotemBar[i],"LEFT",1,0)
 			end
-			TOTEMBARGAP = 11
+			MODULEGAP = 11
 		end
-		
 		if(IsAddOnLoaded"oUF_Experience" and UnitLevel("player") ~= MAX_PLAYER_LEVEL) then
 			self.Experience = CreateFrame("StatusBar", nil, self)
-			self.Experience:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-2-RUNEBARGAP-TOTEMBARGAP)
-			self.Experience:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-2-RUNEBARGAP-TOTEMBARGAP)
+			self.Experience:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-2-MODULEGAP)
+			self.Experience:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-2-MODULEGAP)
 			self.Experience:SetHeight(13)
 			self.Experience:SetStatusBarTexture(TEXTURE)
 			self.Experience:SetStatusBarColor(0, 0.4, 1, 1)
@@ -339,8 +373,8 @@ local UnitSpecific = {
 			EXPREPBARGAP = 21
 		elseif (IsAddOnLoaded"oUF_Reputation" and UnitLevel("player") == MAX_PLAYER_LEVEL) then
 			self.Reputation = CreateFrame("StatusBar", nil, self)
-			self.Reputation:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-2-RUNEBARGAP-TOTEMBARGAP)
-			self.Reputation:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-2-RUNEBARGAP-TOTEMBARGAP)
+			self.Reputation:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-2-MODULEGAP)
+			self.Reputation:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-2-MODULEGAP)
 			self.Reputation:SetHeight(13)
 			self.Reputation:SetStatusBarTexture(TEXTURE)
 			self.Reputation.PostUpdate = PostUpdateReputation
@@ -370,8 +404,8 @@ local UnitSpecific = {
 		end
 		if (playerShowDebuffs) then
 			local debuffs = CreateFrame("Frame", nil, self)
-			debuffs:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-EXPREPBARGAP-RUNEBARGAP-TOTEMBARGAP)
-			debuffs:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-EXPREPBARGAP-RUNEBARGAP-TOTEMBARGAP)
+			debuffs:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-EXPREPBARGAP-MODULEGAP)
+			debuffs:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-EXPREPBARGAP-MODULEGAP)
 			debuffs:SetHeight(playerDebuffSize)
 			debuffs:SetWidth(width)
 			debuffs.size = math.floor(debuffs:GetHeight())
@@ -385,8 +419,8 @@ local UnitSpecific = {
 		end
 		if playerCastBar then
 			local cb = CreateFrame("StatusBar", nil, self)
-			cb:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -2-RUNEBARGAP-TOTEMBARGAP)
-			cb:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT", 0, -2-RUNEBARGAP-TOTEMBARGAP)
+			cb:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -2-MODULEGAP)
+			cb:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT", 0, -2-MODULEGAP)
 			cb:SetBackdrop(backdrop)
 			cb:SetBackdropColor(0, 0, 0, .9)
 			cb:SetToplevel(true)
@@ -512,8 +546,8 @@ local UnitSpecific = {
 		hp.value:SetFont(FONT, SMALL_FONT_SIZE , "OUTLINE")
 		pp.value:SetFont(FONT, SMALL_FONT_SIZE , "OUTLINE")
 		self.Info:SetFont(FONT, SMALL_FONT_SIZE , "OUTLINE")
-		hp:SetHeight(self:GetAttribute("initial-height")*0.6)
-		hp:SetHeight(self:GetAttribute("initial-height")*0.4)
+		self.Health:SetHeight(self:GetAttribute("initial-height")*0.6)
+		self.Power:SetHeight(self:GetAttribute("initial-height")*0.4)
 	end,
 	party = function(self)
 		local hp, pp = self.Health, self.Power
@@ -563,11 +597,10 @@ local UnitSpecific = {
 		self.outsideRangeAlpha = .5
 	end,
 	focus = function(self)
-		local hp, pp = self.Health, self.Power
 		self:SetAttribute("initial-height", focusHeight)
 		self:SetAttribute("initial-width", focusWidth)
-		hp:SetHeight(self:GetAttribute("initial-height")*0.6)
-		pp:SetHeight(self:GetAttribute("initial-height")*0.4)
+		self.Health:SetHeight(self:GetAttribute("initial-height")*0.6)
+		self.Power:SetHeight(self:GetAttribute("initial-height")*0.4)
 		if focusCastBar then
 			local cb = CreateFrame("StatusBar", nil, self)
 			cb:SetStatusBarTexture(TEXTURE)
@@ -699,7 +732,7 @@ local Shared = function(self, unit)
 	local leader = hp:CreateTexture(nil, "OVERLAY")
 	leader:SetHeight(16)
 	leader:SetWidth(16)
-	leader:SetPoint("TOP", hp, "TOP")
+	leader:SetPoint("TOP", hp, "TOP",0,1)
 
 	self.Leader = leader
 
