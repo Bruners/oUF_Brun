@@ -19,7 +19,7 @@ local oUF_Brun = {
 local oUFRuneBar = false							-- Enable/Disable the rune bar delivered by oUF.
 local removeBuffs = false							-- Enable/Disable blizzard default buff frame.
 local hideSelfInfo = true							-- Enable/Disable name and level info on playerframe when at max level.
-local hidePartyInRaid = true						-- Enable/Disable party frames in raid.
+local hidePartyInRaid = false						-- Enable/Disable party frames in raid.
 
 local FONT_SIZE = 14								-- Largest font on frames ( most frames )
 local SMALL_FONT_SIZE = 12							-- Smallest font on frames ( target's target )
@@ -31,7 +31,7 @@ local COMBO = ("Interface\\Addons\\oUF_Brun\\textures\\pb4combo")
 
 local height, width = 35, 252						-- Default frame height and width used by several frames.
 
-local playerShowBuffs = true						-- Enable/disable uffs on player.
+local playerShowBuffs = false						-- Enable/disable uffs on player.
 local playerShowDebuffs = true						-- Enable/disable debuffs on player.
 local playerBuffsSize = 23							-- Size of players buffs.
 local playerDebuffSize = 23							-- Size of players debuffs.
@@ -63,11 +63,11 @@ local focusBuffSpacing = 2							-- Buff spacing
 local focusDebuffSpacing = 2						-- Debuff spacing
 local focusCastBar = true							-- Enable/Disable castbar on focus.
 
-local partyHeight, partyWidth = height, width-50	-- Party height and width.
+local partyHeight, partyWidth = height, width-46	-- Party height and width.
 local partyShowBuffs = true							-- Enable/disable buffs on party.
 local partyShowDebuffs = true						-- Enable/disable debuffs on party.
-local partyBuffSize = 17							-- Size of party buffs.
-local partyDebuffSize = 17							-- Size of party debuffs.
+local partyBuffSize = 19							-- Size of party buffs.
+local partyDebuffSize = 19							-- Size of party debuffs.
 local partyBuffSpacing = 2							-- Debuff spacing
 local partyDebuffSpacing = 2						-- Debuff spacing
 
@@ -455,8 +455,8 @@ local UnitSpecific = {
 			self.Auras:SetWidth(self:GetAttribute("initial-width"))
 			self.Auras.size = self:GetAttribute("initial-height")
 			self.Auras.spacing = 2
-			self.Auras.initialAnchor = "TOPRIGHT"
-			self.Auras["growth-x"] = "LEFT"
+			self.Auras.initialAnchor = ("TOPRIGHT")
+			self.Auras["growth-x"] = ("LEFT")
 		end
 
 		if petCastBar then
@@ -574,10 +574,9 @@ local UnitSpecific = {
 				self.Buffs:SetWidth(partyWidth)
 				self.Buffs.spacing = partyBuffSpacing
 				self.Buffs.size = math.floor(self.Buffs:GetHeight() + .8)
-				self.Buffs.num = math.floor(partyWidth / self.Buffs.size + .5)
-				self.Buffs.initialAnchor = "BOTTOMLEFT"
-				self.Buffs["growth-y"] = "UP"
-				self.Buffs["growth-x"] = "RIGHT"
+				self.Buffs.initialAnchor = ("BOTTOMLEFT")
+				self.Buffs["growth-y"] = ("UP")
+				self.Buffs["growth-x"] = ("RIGHT")
 			end
 			if (partyShowBuffs) then
 				self.Debuffs = CreateFrame("Frame", nil, self)
@@ -587,9 +586,9 @@ local UnitSpecific = {
 				self.Debuffs.spacing = partyDebuffSpacing
 				self.Debuffs.size = math.floor(self.Debuffs:GetHeight() + .5)
 				self.Debuffs.num = math.floor(partyWidth / self.Debuffs.size + .5)
-				self.Debuffs.initialAnchor = "BOTTOMLEFT"
-				self.Debuffs["growth-x"] = "RIGHT"
-				self.Debuffs["growth-y"] = "DOWN"
+				self.Debuffs.initialAnchor = ("BOTTOMRIGHT")
+				self.Debuffs["growth-y"] = ("DOWN")
+				self.Debuffs["growth-x"] = ("LEFT")
 				self.Debuffs.filter = false
 			end
 			self:SetAttribute("initial-height", partyHeight)
@@ -769,8 +768,8 @@ local Shared = function(self, unit)
 	self.RaidIcon = ricon
 
 	local pvp = hp:CreateTexture(nil, "OVERLAY")
-	pvp:SetHeight(35)
-	pvp:SetWidth(35)
+	pvp:SetHeight(30)
+	pvp:SetWidth(30)
 	pvp:SetPoint("TOPLEFT", hp, "TOPRIGHT", -5, 3)
 
 	self.PvP = pvp
@@ -834,7 +833,7 @@ local party = oUF:Spawn("header", "oUF_Party")
 party:SetPoint(unpack(oUF_Brun.Party))
 party:SetManyAttributes(
 	"showParty", true,
-	"yOffset", -79,
+	"yOffset", -100,
 	"xOffset", -40,
 	"maxColumns", 2,
 	"unitsPerColumn", 2,
