@@ -31,7 +31,7 @@ local COMBO = ("Interface\\Addons\\oUF_Brun\\textures\\pb4combo")
 
 local height, width = 35, 252						-- Default frame height and width used by several frames.
 
-local playerShowBuffs = false						-- Enable/disable uffs on player.
+local playerShowBuffs = true						-- Enable/disable uffs on player.
 local playerShowDebuffs = true						-- Enable/disable debuffs on player.
 local playerBuffsSize = 23							-- Size of players buffs.
 local playerDebuffSize = 23							-- Size of players debuffs.
