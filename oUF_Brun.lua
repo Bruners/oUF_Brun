@@ -19,7 +19,7 @@ local oUF_Brun = {
 local oUFRuneBar = false							-- Enable/Disable the rune bar delivered by oUF.
 local removeBuffs = false							-- Enable/Disable blizzard default buff frame.
 local hideSelfInfo = true							-- Enable/Disable name and level info on playerframe when at max level.
-local hidePartyInRaid = false						-- Enable/Disable party frames in raid.
+local hidePartyInRaid = true						-- Enable/Disable party frames in raid.
 
 local FONT_SIZE = 14								-- Largest font on frames ( most frames )
 local SMALL_FONT_SIZE = 12							-- Smallest font on frames ( target's target )
@@ -31,7 +31,7 @@ local COMBO = ("Interface\\Addons\\oUF_Brun\\textures\\pb4combo")
 
 local height, width = 35, 252						-- Default frame height and width used by several frames.
 
-local playerShowBuffs = true						-- Enable/disable uffs on player.
+local playerShowBuffs = false						-- Enable/disable uffs on player.
 local playerShowDebuffs = true						-- Enable/disable debuffs on player.
 local playerBuffsSize = 23							-- Size of players buffs.
 local playerDebuffSize = 23							-- Size of players debuffs.
@@ -541,6 +541,7 @@ local UnitSpecific = {
 
 			self.Debuffs = debuffs
 		end
+		self.PostUpdateAuraIcon = PostUpdateAuraIcon
 	end,
 	targettarget = function(self)
 		local hp, pp = self.Health, self.Power
@@ -601,18 +602,24 @@ local UnitSpecific = {
 		self.outsideRangeAlpha = .5
 	end,
 	focus = function(self)
+		local hp, pp = self.Health, self.Power
 		self:SetAttribute("initial-height", focusHeight)
 		self:SetAttribute("initial-width", focusWidth)
-		self.Health:SetHeight(self:GetAttribute("initial-height")*0.6)
-		self.Power:SetHeight(self:GetAttribute("initial-height")*0.4)
+		hp:SetHeight(self:GetAttribute("initial-height"))
+		pp:Hide()
 		if focusCastBar then
 			local cb = CreateFrame("StatusBar", nil, self)
-			cb:SetStatusBarTexture(TEXTURE)
-			cb:SetStatusBarColor(1, .25, .35, .5)
-			cb:SetAllPoints(self.Health)
+			cb:SetPoint("TOPLEFT", hp, "BOTTOMLEFT", 0, -2)
+			cb:SetPoint("TOPRIGHT", hp, "BOTTOMRIGHT", 0, -2)
+			cb:SetBackdrop(backdrop)
+			cb:SetBackdropColor(0, 0, 0, .9)
 			cb:SetToplevel(true)
+			cb:SetStatusBarTexture(TEXTURE)
+			cb:SetStatusBarColor(1.0, 0.7, 0.0)
+			cb:SetHeight(14)
 
 			self.Castbar = cb
+			castbarStyle(cb)
 		end
 		if (focusShowBuffs) then
 			local buffs = CreateFrame("Frame", nil, self)
@@ -627,11 +634,10 @@ local UnitSpecific = {
 			buffs["growth-x"] = ("LEFT")
 
 			self.Buffs = buffs
-			self.Power:Hide()
 		end
 		if (focusShowDebuffs) then
 			local debuffs = CreateFrame("Frame", nil, self)
-			debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT",0,-5)
+			debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT",0,-EXPREPBARGAP)
 			debuffs:SetHeight(focusDebuffSize)
 			debuffs:SetWidth(focusWidth)
 			debuffs.size = math.floor(debuffs:GetHeight())
@@ -643,6 +649,7 @@ local UnitSpecific = {
 
 			self.Debuffs = debuffs
 		end
+		self.PostUpdateAuraIcon = PostUpdateAuraIcon
 	end,
 }
 UnitSpecific.targettargettarget = UnitSpecific.targettarget
@@ -798,7 +805,6 @@ local Shared = function(self, unit)
 	self.Highlight = hl
 
 	self.PostCreateAuraIcon = PostCreateAuraIcon
-	self.PostUpdateAuraIcon = PostUpdateAuraIcon
 	
 	-- Small hacks are always allowed...
 	local unit = unit or "party"
