@@ -658,7 +658,6 @@ local Shared = function(self, unit)
 	self.colors = colors
 	self.menu = menu
 	self.BarFade = true
-	self.MoveableFrames = true
 	self.DebuffHighlightBackdrop = true
 
 	self:SetScript("OnEnter", UnitFrame_OnEnter)
@@ -841,6 +840,8 @@ party:SetManyAttributes(
 	"columnSpacing", 40,
 	"template", "oUF_BrunPartyTemplate"
 )
+party:Show()
+
 local partyToggle = CreateFrame("Frame")
 partyToggle:RegisterEvent("PLAYER_LOGIN")
 partyToggle:RegisterEvent("RAID_ROSTER_UPDATE")

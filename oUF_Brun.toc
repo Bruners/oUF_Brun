@@ -1,11 +1,11 @@
-## Interface: 30200
+## Interface: 30300
 ## Title: oUF: |cffff8000Brun|r 
 ## Author: Bruners
-## Version: 1.6.3
+## Version: 1.6.5
 ## X-eMail: bruners@gmail.com
 ## RequiredDeps: oUF
 ## OptionalDeps: oUF_TotemBar, oUF_CombatFeedback, oUF_SpellRange, oUF_BarFader, oUF_Experience, oUF_Reputation, oUF_Smooth
-## Notes: oUF 1.3.21
+## Notes: oUF 1.3.24
 
 oUF_Brun.xml
 oUF_BrunTags.lua
