@@ -766,10 +766,17 @@ local Shared = function(self, unit)
 
 	self.RaidIcon = ricon
 
+	local lfdrole = hp:CreateTexture(nil, "OVERLAY")
+	lfdrole:SetHeight(13)
+	lfdrole:SetHeight(13)
+	lfdrole:SetPoint("TOPLEFT", hp, "BOTTOMRIGHT", -5, 0)
+
+	self.LFDRole = lfdrole
+
 	local pvp = hp:CreateTexture(nil, "OVERLAY")
 	pvp:SetHeight(30)
 	pvp:SetWidth(30)
-	pvp:SetPoint("TOPLEFT", hp, "TOPRIGHT", -5, 3)
+	pvp:SetPoint("TOPLEFT", hp, "TOPRIGHT", -8, 3)
 
 	self.PvP = pvp
 
