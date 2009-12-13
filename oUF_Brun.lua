@@ -282,7 +282,7 @@ local UnitSpecific = {
 				end
 
 				self.Runes = runes
-				MODULEGAP = 10
+				MODULEGAP = 11
 			end
 		end
 
@@ -305,7 +305,7 @@ local UnitSpecific = {
 			self.DruidPower:SetBackdropColor(0, 0, 0, .9)
 			self.DruidPower:SetAlpha(0.8)
 
-			MODULEGAP = 10
+			MODULEGAP = 11
 		end
 
 		if UnitLevel("player") ~= MAX_PLAYER_LEVEL then
@@ -352,7 +352,7 @@ local UnitSpecific = {
 				self.TotemBar[i].Name:SetJustifyH('LEFT')
 				self.TotemBar[i].Name:SetPoint("LEFT",self.TotemBar[i],"LEFT",1,0)
 			end
-			MODULEGAP = 10
+			MODULEGAP = 11
 		end
 		if(IsAddOnLoaded"oUF_Experience" and UnitLevel("player") ~= MAX_PLAYER_LEVEL) then
 			self.Experience = CreateFrame("StatusBar", nil, self)
@@ -408,8 +408,8 @@ local UnitSpecific = {
 		end
 		if (playerShowDebuffs) then
 			local debuffs = CreateFrame("Frame", nil, self)
-			debuffs:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-EXPREPBARGAP-MODULEGAP)
-			debuffs:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-EXPREPBARGAP-MODULEGAP)
+			debuffs:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0,-EXPREPBARGAP-MODULEGAP+2)
+			debuffs:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT",0,-EXPREPBARGAP-MODULEGAP+2)
 			debuffs:SetHeight(playerDebuffSize)
 			debuffs:SetWidth(width)
 			debuffs.size = math.floor(debuffs:GetHeight())
@@ -560,7 +560,7 @@ local UnitSpecific = {
 			self.Power:Hide()
 			self.PvP:SetHeight(15)
 			self.PvP:SetWidth(15)
-			slef.LFDRole:Hide()
+			self.LFDRole:Hide()
 			self.PvP:SetPoint("TOPRIGHT", 10, 10)
 			self:Tag(self.Name, "[ShortName]")
 			self:Tag(hp.value, "[brunminushp]")
