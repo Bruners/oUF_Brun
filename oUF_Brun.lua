@@ -16,7 +16,7 @@ local oUF_Brun = {
 	Runeframe = {"TOPLEFT", "oUF_player", "BOTTOMLEFT", 0, -20}, -- Coords for the blizzard runes
 }
 
-local oUFRuneBar = false							-- Enable/Disable the rune bar delivered by oUF.
+local oUFRuneBar = true							-- Enable/Disable the rune bar delivered by oUF.
 local removeBuffs = false							-- Enable/Disable blizzard default buff frame.
 local hideSelfInfo = true							-- Enable/Disable name and level info on playerframe when at max level.
 local hidePartyInRaid = false						-- Enable/Disable party frames in raid.
@@ -272,7 +272,7 @@ local UnitSpecific = {
 				runes:SetBackdropColor(0, 0, 0, .9)
 				runes.order = { 1, 2, 5, 6, 3, 4}
 				runes.height = 7
-				runes.width = width / 6 - 0.75
+				runes.width = width / 6 - 0.2
 
 				for i = 1, 6 do
 					local bar = CreateFrame("StatusBar", nil, runes)
@@ -282,7 +282,7 @@ local UnitSpecific = {
 				end
 
 				self.Runes = runes
-				MODULEGAP = 11
+				MODULEGAP = 10
 			end
 		end
 
@@ -305,7 +305,7 @@ local UnitSpecific = {
 			self.DruidPower:SetBackdropColor(0, 0, 0, .9)
 			self.DruidPower:SetAlpha(0.8)
 
-			MODULEGAP = 11
+			MODULEGAP = 10
 		end
 
 		if UnitLevel("player") ~= MAX_PLAYER_LEVEL then
@@ -352,7 +352,7 @@ local UnitSpecific = {
 				self.TotemBar[i].Name:SetJustifyH('LEFT')
 				self.TotemBar[i].Name:SetPoint("LEFT",self.TotemBar[i],"LEFT",1,0)
 			end
-			MODULEGAP = 11
+			MODULEGAP = 10
 		end
 		if(IsAddOnLoaded"oUF_Experience" and UnitLevel("player") ~= MAX_PLAYER_LEVEL) then
 			self.Experience = CreateFrame("StatusBar", nil, self)
@@ -560,6 +560,7 @@ local UnitSpecific = {
 			self.Power:Hide()
 			self.PvP:SetHeight(15)
 			self.PvP:SetWidth(15)
+			slef.LFDRole:Hide()
 			self.PvP:SetPoint("TOPRIGHT", 10, 10)
 			self:Tag(self.Name, "[ShortName]")
 			self:Tag(hp.value, "[brunminushp]")
@@ -767,8 +768,8 @@ local Shared = function(self, unit)
 	self.RaidIcon = ricon
 
 	local lfdrole = hp:CreateTexture(nil, "OVERLAY")
-	lfdrole:SetHeight(13)
-	lfdrole:SetHeight(13)
+	lfdrole:SetHeight(20)
+	lfdrole:SetWidth(20)
 	lfdrole:SetPoint("TOPLEFT", hp, "BOTTOMRIGHT", -5, 0)
 
 	self.LFDRole = lfdrole
