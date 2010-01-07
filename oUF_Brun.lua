@@ -438,25 +438,27 @@ local UnitSpecific = {
 	end,
 
 	pet = function(self)
+		local hp, pp = self.Health, self.Power
 		self:SetAttribute("initial-height", petHeight)
 		self:SetAttribute("initial-width", petWidth)
-
-		self.Health.colorHappiness = true
-		self.Health:SetHeight(self:GetAttribute("initial-height")*0.8)
-		self.Power:SetHeight(self:GetAttribute("initial-height")*0.2)
-		self:Tag(self.Health.value, "[brunhppp]")
+		hp.colorHappiness = true
+		hp:SetHeight(self:GetAttribute("initial-height")*0.8)
+		pp:SetHeight(self:GetAttribute("initial-height")*0.2)
+		self:Tag(hp.value, "[brunhppp]")
 		self.Info:Hide()
-		self.Power.value:Hide()
-		local hp, pp = self.Health, self.Power
+		pp.value:Hide()
+
 		if (petShowAura) then
-			self.Auras = CreateFrame("Frame", nil, self)
-			self.Auras:SetPoint("TOPRIGHT", self, "TOPLEFT", -3, 0)
-			self.Auras:SetHeight(hp:GetHeight() + pp:GetHeight())
-			self.Auras:SetWidth(self:GetAttribute("initial-width"))
-			self.Auras.size = self:GetAttribute("initial-height")
-			self.Auras.spacing = 2
-			self.Auras.initialAnchor = ("TOPRIGHT")
-			self.Auras["growth-x"] = ("LEFT")
+			local auras = CreateFrame("Frame", nil, self)
+			auras:SetPoint("TOPRIGHT", self, "TOPLEFT", -3, 0)
+			auras:SetHeight(hp:GetHeight() + pp:GetHeight())
+			auras:SetWidth(self:GetAttribute("initial-width"))
+			auras.size = self:GetAttribute("initial-height")
+			auras.spacing = 2
+			auras.initialAnchor = ("TOPRIGHT")
+			auras["growth-x"] = ("LEFT")
+
+			self.Auras = auras
 		end
 
 		if petCastBar then
@@ -568,28 +570,32 @@ local UnitSpecific = {
 			hp:SetHeight(self:GetAttribute("initial-height"))
 		else
 			if (partyShowBuffs) then
-				self.Buffs = CreateFrame("Frame", nil, self)
-				self.Buffs:SetPoint("BOTTOMLEFT", self, "TOPLEFT", 0, 2)
-				self.Buffs:SetHeight(partyBuffSize)
-				self.Buffs:SetWidth(partyWidth)
-				self.Buffs.spacing = partyBuffSpacing
-				self.Buffs.size = math.floor(self.Buffs:GetHeight() + .8)
-				self.Buffs.initialAnchor = ("BOTTOMLEFT")
-				self.Buffs["growth-y"] = ("UP")
-				self.Buffs["growth-x"] = ("RIGHT")
+				local buffs = CreateFrame("Frame", nil, self)
+				buffs:SetPoint("BOTTOMLEFT", self, "TOPLEFT", 0, 2)
+				buffs:SetHeight(partyBuffSize)
+				buffs:SetWidth(partyWidth)
+				buffs.spacing = partyBuffSpacing
+				buffs.size = math.floor(self.Buffs:GetHeight() + .8)
+				buffs.initialAnchor = ("BOTTOMLEFT")
+				buffs["growth-y"] = ("UP")
+				buffs["growth-x"] = ("RIGHT")
+
+				self.Buffs = buffs
 			end
 			if (partyShowBuffs) then
-				self.Debuffs = CreateFrame("Frame", nil, self)
-				self.Debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT",0,-4)
-				self.Debuffs:SetHeight(partyDebuffSize)
-				self.Debuffs:SetWidth(partyWidth)
-				self.Debuffs.spacing = partyDebuffSpacing
-				self.Debuffs.size = math.floor(self.Debuffs:GetHeight() + .5)
-				self.Debuffs.num = math.floor(partyWidth / self.Debuffs.size + .5)
-				self.Debuffs.initialAnchor = ("BOTTOMRIGHT")
-				self.Debuffs["growth-y"] = ("DOWN")
-				self.Debuffs["growth-x"] = ("LEFT")
-				self.Debuffs.filter = false
+				local debuffs = CreateFrame("Frame", nil, self)
+				debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT",0,-4)
+				debuffs:SetHeight(partyDebuffSize)
+				debuffs:SetWidth(partyWidth)
+				debuffs.spacing = partyDebuffSpacing
+				debuffs.size = math.floor(self.Debuffs:GetHeight() + .5)
+				debuffs.num = math.floor(partyWidth / self.Debuffs.size + .5)
+				debuffs.initialAnchor = ("BOTTOMRIGHT")
+				debuffs["growth-y"] = ("DOWN")
+				debuffs["growth-x"] = ("LEFT")
+				debuffs.filter = false
+
+				self.Debuffs = debuffs
 			end
 			
 			local lfdrole = hp:CreateTexture(nil, "OVERLAY")
