@@ -16,7 +16,7 @@ local oUF_Brun = {
 	Runeframe = {"TOPLEFT", "oUF_player", "BOTTOMLEFT", 0, -20}, -- Coords for the blizzard runes
 }
 
-local oUFRuneBar = true							-- Enable/Disable the rune bar delivered by oUF.
+local oUFRuneBar = false							-- Enable/Disable the rune bar delivered by oUF.
 local removeBuffs = false							-- Enable/Disable blizzard default buff frame.
 local hideSelfInfo = true							-- Enable/Disable name and level info on playerframe when at max level.
 local hidePartyInRaid = false						-- Enable/Disable party frames in raid.
@@ -560,7 +560,6 @@ local UnitSpecific = {
 			self.Power:Hide()
 			self.PvP:SetHeight(15)
 			self.PvP:SetWidth(15)
-			self.LFDRole:Hide()
 			self.PvP:SetPoint("TOPRIGHT", 10, 10)
 			self:Tag(self.Name, "[ShortName]")
 			self:Tag(hp.value, "[brunminushp]")
@@ -592,6 +591,14 @@ local UnitSpecific = {
 				self.Debuffs["growth-x"] = ("LEFT")
 				self.Debuffs.filter = false
 			end
+			
+			local lfdrole = hp:CreateTexture(nil, "OVERLAY")
+			lfdrole:SetHeight(20)
+			lfdrole:SetWidth(20)
+			lfdrole:SetPoint("TOPLEFT", hp, "BOTTOMRIGHT", -5, 0)
+
+			self.LFDRole = lfdrole
+
 			self:SetAttribute("initial-height", partyHeight)
 			self:SetAttribute("initial-width", partyWidth)
 			hp:SetHeight(self:GetAttribute("initial-height")*0.6)
@@ -766,13 +773,6 @@ local Shared = function(self, unit)
 	ricon:SetPoint("RIGHT", leader, "LEFT")
 
 	self.RaidIcon = ricon
-
-	local lfdrole = hp:CreateTexture(nil, "OVERLAY")
-	lfdrole:SetHeight(20)
-	lfdrole:SetWidth(20)
-	lfdrole:SetPoint("TOPLEFT", hp, "BOTTOMRIGHT", -5, 0)
-
-	self.LFDRole = lfdrole
 
 	local pvp = hp:CreateTexture(nil, "OVERLAY")
 	pvp:SetHeight(30)
