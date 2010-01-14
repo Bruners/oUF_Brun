@@ -589,7 +589,7 @@ local UnitSpecific = {
 				debuffs:SetWidth(partyWidth)
 				debuffs.spacing = partyDebuffSpacing
 				debuffs.size = math.floor(debuffs:GetHeight() + .5)
-				debuffs.num = math.floor(partyWidth / self.Debuffs.size + .5)
+				debuffs.num = math.floor(partyWidth / debuffs.size + .5)
 				debuffs.initialAnchor = ("BOTTOMRIGHT")
 				debuffs["growth-y"] = ("DOWN")
 				debuffs["growth-x"] = ("LEFT")
