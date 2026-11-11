@@ -40,6 +40,7 @@ local fadeOutAlpha = 0.35				-- Alpha value for faded Player/Pet frames when idl
 local showBossFrames = true				-- Spawn Boss1..MAX_BOSS_FRAMES frames.
 local enableTotemBar = true				-- Style and anchor clickable TotemFrame icons above Player/Pet.
 local hideCompactRaidManager = true		-- Auto-fade the collapsed Blizzard Raid Manager tab until mouseover.
+local highlightExpiringAuras = true		-- Highlight aura timer numbers in yellow/red when expiring (<=10s / <=5s).
 
 ns.firstNameOnly = firstNameOnly
 
@@ -144,8 +145,8 @@ end
 --===================================================--
 
 local auraDurationFormatter
-if C_StringUtil and C_StringUtil.CreateNumericRuleFormatter and Enum.NumericRuleFormatRounding then
-	local roundDown = Enum.NumericRuleFormatRounding.Down
+if C_StringUtil and C_StringUtil.CreateNumericRuleFormatter then
+	local roundDown = (Enum.NumericRuleFormatRounding and Enum.NumericRuleFormatRounding.Down) or 2
 	auraDurationFormatter = C_StringUtil.CreateNumericRuleFormatter()
 	auraDurationFormatter:SetBreakpoints({
 		{ threshold = 0, step = 1, rounding = roundDown, format = "%d" },
@@ -163,6 +164,23 @@ local castTimeFormatter
 if C_StringUtil and C_StringUtil.CreateNumericRuleFormatter then
 	castTimeFormatter = C_StringUtil.CreateNumericRuleFormatter()
 	castTimeFormatter:SetBreakpoints({ { threshold = 0, format = "%.1f" } })
+end
+
+local auraDurationColors
+if C_CurveUtil and C_CurveUtil.CreateColorCurve then
+	local curve = C_CurveUtil.CreateColorCurve()
+	if Enum.LuaCurveType and Enum.LuaCurveType.Step then
+		curve:SetType(Enum.LuaCurveType.Step)
+	end
+	curve:AddPoint(0, CreateColor(1, 0.25, 0.25))     -- <= 5s: Red
+	curve:AddPoint(5.001, CreateColor(1, 0.88, 0.15)) -- 5-10s: Yellow
+	curve:AddPoint(10.001, CreateColor(1, 1, 1))      -- >10s: White
+
+	local prop = (Enum.DurationTextBindingProperty and Enum.DurationTextBindingProperty.RemainingDuration) or 0
+	auraDurationColors = {
+		curve = curve,
+		property = prop,
+	}
 end
 
 -- Resolve the unit token from oUF 14's self.__unit before invoking GameTooltip:SetUnit.
@@ -217,7 +235,9 @@ end
 --===================================================--
 
 local function StyleAuraButton(element, button, options)
-	local fontSize = math.max(8, math.floor((element.size or 20) * 0.45))
+	local elemSize = element.size or 20
+	local timerSize = math.max(12, math.floor(elemSize * 0.58))
+	local countSize = math.max(9, math.floor(elemSize * 0.45))
 
 	if button.Icon then
 		button.Icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
@@ -234,23 +254,33 @@ local function StyleAuraButton(element, button, options)
 			for i = 1, button.Cooldown:GetNumRegions() do
 				local region = select(i, button.Cooldown:GetRegions())
 				if region and region.IsObjectType and region:IsObjectType("FontString") then
-					region:SetFont(FONT, fontSize, "OUTLINE")
+					region:SetFont(FONT, timerSize, "OUTLINE")
 				end
 			end
 		end
 	end
 
 	if button.Time then
-		button.Time:SetFont(FONT, fontSize, "OUTLINE")
+		button.Time:SetShadowOffset(1.5, -1.5)
+		button.Time:SetShadowColor(0, 0, 0, 1)
+		button.Time:SetFont(FONT, timerSize, "OUTLINE")
 		button.Time:ClearAllPoints()
-		button.Time:SetPoint("TOP", button, "TOP", 0, 2)
+		button.Time:SetPoint("CENTER", button, "CENTER", 0, 0)
 		button.Time:SetTextColor(1, 1, 1)
+		if button.Time.SetDrawLayer then
+			button.Time:SetDrawLayer("OVERLAY", 7)
+		end
 	end
 
 	if button.Count then
-		button.Count:SetFont(FONT, fontSize, "OUTLINE")
+		button.Count:SetShadowOffset(1, -1)
+		button.Count:SetShadowColor(0, 0, 0, 1)
+		button.Count:SetFont(FONT, countSize, "OUTLINE")
 		button.Count:ClearAllPoints()
 		button.Count:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 1, -1)
+		if button.Count.SetDrawLayer then
+			button.Count:SetDrawLayer("OVERLAY", 7)
+		end
 	end
 
 	local overlay = button:CreateTexture(nil, "OVERLAY")
@@ -288,9 +318,12 @@ local function CreateAuraWidget(self, filter, frameWidth, iconSize, spacing, gro
 	element.groupLineSpacing = spacing
 	element.forceNewLine = false
 	element.showCount = true
+	element.showDuration = true
 	if auraDurationFormatter then
-		element.showDuration = true
 		element.durationFormatter = auraDurationFormatter
+	end
+	if highlightExpiringAuras and auraDurationColors then
+		element.durationColors = auraDurationColors
 	end
 	element.showDebuffBorder = (filter ~= "HELPFUL")
 	if filter == "HELPFUL" then
@@ -752,6 +785,7 @@ local DEFAULT_OPTIONS = {
 	focusShowDebuffs = focusShowDebuffs,
 	partyShowBuffs = partyShowBuffs,
 	partyShowDebuffs = partyShowDebuffs,
+	highlightExpiringAuras = highlightExpiringAuras,
 	showMinimapIcon = true,
 }
 
@@ -801,6 +835,7 @@ local function ApplySavedOptions()
 	focusShowDebuffs = opts.focusShowDebuffs
 	partyShowBuffs = opts.partyShowBuffs
 	partyShowDebuffs = opts.partyShowDebuffs
+	highlightExpiringAuras = (opts.highlightExpiringAuras ~= false) and (opts.enlargeLowDurationBuffs ~= false)
 
 	if minimapButton then
 		minimapButton:SetShown(opts.showMinimapIcon ~= false)
@@ -993,6 +1028,7 @@ local function ToggleConfigGUI()
 				{ key = "focusShowDebuffs", label = "Show Focus Debuffs" },
 				{ key = "partyShowBuffs", label = "Show Party Buffs" },
 				{ key = "partyShowDebuffs", label = "Show Party Debuffs" },
+				{ key = "highlightExpiringAuras", label = "Highlight aura timer when expiring (<=10s / <=5s)" },
 			},
 		},
 	}
