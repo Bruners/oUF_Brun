@@ -6,7 +6,7 @@
 ## AllowLoadGameType: standard, camelot
 ## SavedVariables: oUF_BrunDB
 ## RequiredDeps: oUF
-## Notes: oUF 14.2.1 layout for WoW Forever and Retail
+## Notes: oUF 14.3+ layout for WoW Forever and Retail
 
 oUF_BrunTags.lua
 oUF_Brun.lua

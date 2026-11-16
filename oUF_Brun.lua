@@ -25,6 +25,7 @@ local oUF_Brun = {
 	Party = { "TOPLEFT", UIParent, "TOPLEFT", 20, -50 },
 	Boss = { "RIGHT", UIParent, "RIGHT", -50, 150 },
 	Runeframe = { "TOPLEFT", "oUF_player", "BOTTOMLEFT", 0, -20 },
+	Swing = { "CENTER", UIParent, "CENTER", 0, -295 },
 }
 
 local oUFRuneBar = false				-- Enable/Disable the rune bar delivered by oUF.
@@ -39,6 +40,8 @@ local enableFader = true				-- Fade out Player and Pet frames when out of combat
 local fadeOutAlpha = 0.35				-- Alpha value for faded Player/Pet frames when idle.
 local showBossFrames = true				-- Spawn Boss1..MAX_BOSS_FRAMES frames.
 local enableTotemBar = true				-- Style and anchor clickable TotemFrame icons above Player/Pet.
+local enableSwingBar = true				-- Show player melee/ranged swing timer bars.
+local enableClassPower = true			-- Show player ClassPower (Combo Points, Holy Power, etc.) & Monk Stagger bars.
 local hideCompactRaidManager = true		-- Auto-fade the collapsed Blizzard Raid Manager tab until mouseover.
 local highlightExpiringAuras = true		-- Highlight aura timer numbers in yellow/red when expiring (<=10s / <=5s).
 
@@ -196,9 +199,12 @@ local function UnitFrameOnLeave()
 end
 
 -- Sync background texture tint with the parent Health/Power statusbar color.
-local function PostUpdateBarColor(element, _, color, altR, altG, altB)
+local function PostUpdateBarColor(element, unitOrColor, color, altR, altG, altB)
 	local bg = element.bg
 	if not bg then return end
+	if type(unitOrColor) == "table" and unitOrColor.GetRGB then
+		color = unitOrColor
+	end
 	if color then
 		bg:SetVertexColor(color:GetRGB())
 	elseif altB then
@@ -303,7 +309,8 @@ end
 -- Create an oUF 14 intrinsic AuraContainer with the requested filter and layout geometry.
 local function CreateAuraWidget(self, filter, frameWidth, iconSize, spacing, growthX, growthY)
 	local initialAnchor = (growthY == "UP" and "BOTTOM" or "TOP") .. (growthX == "LEFT" and "RIGHT" or "LEFT")
-	local element = self:CreateAuras({
+	local createAuras = self.CreateAurasElement or self.CreateAuras
+	local element = createAuras(self, {
 		initialAnchor = initialAnchor,
 		growthX = growthX,
 		growthY = growthY,
@@ -555,6 +562,15 @@ local function CreateHealthPrediction(self)
 	hp.OverHealAbsorbIndicator = overHealAbsorb
 	hp.OverHealIndicator = overHeal
 	hp.incomingHealOverflow = 1.0
+
+	if GetUnitTotalModifiedMaxHealthPercent then
+		local tempLoss = CreateFrame("StatusBar", nil, hp)
+		tempLoss:SetAllPoints(hp)
+		tempLoss:SetReverseFill(true)
+		tempLoss:SetStatusBarTexture(TEXTURE)
+		tempLoss:SetStatusBarColor(0.6, 0.15, 0.15, 0.75)
+		hp.TempLoss = tempLoss
+	end
 end
 
 local function CreateCostPrediction(bar, barWidth)
@@ -567,6 +583,19 @@ local function CreateCostPrediction(bar, barWidth)
 	cost:SetStatusBarColor(1, 1, 1, 0.45)
 	cost:SetWidth(barWidth)
 	bar.CostPrediction = cost
+end
+
+local function CreatePrivateAuras(self, size, point, relFrame, relPoint, x, y, growthX)
+	if not (C_UnitAuras and C_UnitAuras.AddPrivateAuraAnchor) then return end
+	local pa = CreateFrame("Frame", nil, self)
+	pa:SetPoint(point, relFrame, relPoint, x, y)
+	pa:SetSize(size * 2 + 2, size)
+	pa.size = size
+	pa.spacing = 2
+	pa.num = 2
+	pa.growthX = growthX or "RIGHT"
+	pa.initialAnchor = (pa.growthX == "LEFT") and "RIGHT" or "LEFT"
+	self.PrivateAuras = pa
 end
 
 local function PostUpdateThreat(element, _, status, color)
@@ -786,6 +815,8 @@ local DEFAULT_OPTIONS = {
 	partyShowBuffs = partyShowBuffs,
 	partyShowDebuffs = partyShowDebuffs,
 	highlightExpiringAuras = highlightExpiringAuras,
+	enableSwingBar = enableSwingBar,
+	enableClassPower = enableClassPower,
 	showMinimapIcon = true,
 }
 
@@ -821,6 +852,8 @@ local function ApplySavedOptions()
 	hidePartyInRaid = opts.hidePartyInRaid
 	showBossFrames = opts.showBossFrames
 	enableTotemBar = opts.enableTotemBar
+	enableSwingBar = (opts.enableSwingBar ~= false)
+	enableClassPower = (opts.enableClassPower ~= false)
 	hideCompactRaidManager = opts.hideCompactRaidManager
 	oUFRuneBar = opts.oUFRuneBar
 	removeBuffs = opts.removeBuffs
@@ -1010,6 +1043,7 @@ local function ToggleConfigGUI()
 				{ key = "enableTotemBar", label = "Enable Clickable Totem Bar above Player" },
 				{ key = "hideCompactRaidManager", label = "Auto-fade Blizzard Raid Manager Tab" },
 				{ key = "oUFRuneBar", label = "Use oUF Death Knight Rune Bar" },
+				{ key = "enableClassPower", label = "Show Player Class Power / Stagger Bar" },
 				{ key = "removeBuffs", label = "Hide Default Blizzard Buff Frame" },
 			},
 		},
@@ -1018,6 +1052,7 @@ local function ToggleConfigGUI()
 			options = {
 				{ key = "desaturateOtherDebuffs", label = "Prioritize Player Debuffs & desaturate others" },
 				{ key = "playerCastBar", label = "Show Player Castbar" },
+				{ key = "enableSwingBar", label = "Show Player Swing Timer Bar" },
 				{ key = "targetCastBar", label = "Show Target Castbar" },
 				{ key = "focusCastBar", label = "Show Focus Castbar" },
 				{ key = "playerShowBuffs", label = "Show Player Buffs" },
@@ -1382,6 +1417,64 @@ do
 end
 
 --===================================================--
+-- Swing Timer Bars (oUF 14.3+ Swing Element)
+--===================================================--
+
+local function CreateSwingBars(self)
+	if not enableSwingBar or not self.CreateSwingElement or not Enum or not Enum.PlayerSwingType then
+		return
+	end
+
+	local swingWidth, swingHeight = 180, 10
+	local swingAnchor = CreatePositionAnchor("Swing", swingWidth, swingHeight, oUF_Brun.Swing)
+	local fontSize = math.max(8, SMALL_FONT_SIZE - 2)
+	local direction = Enum.StatusBarTimerDirection and Enum.StatusBarTimerDirection.ElapsedTime
+
+	local specs = {
+		{ swingType = Enum.PlayerSwingType.Mainhand or Enum.PlayerSwingType.MainHand, label = "MH", color = { 0.9, 0.75, 0.25 }, yOffset = 0 },
+		{ swingType = Enum.PlayerSwingType.Offhand or Enum.PlayerSwingType.OffHand, label = "OH", color = { 0.75, 0.52, 0.2 }, yOffset = -(swingHeight + 4) },
+		{ swingType = Enum.PlayerSwingType.Ranged, label = "Ranged", color = { 0.35, 0.75, 0.95 }, yOffset = 0 },
+	}
+
+	for _, spec in ipairs(specs) do
+		if spec.swingType then
+			local bar = self:CreateSwingElement(spec.swingType)
+			bar:SetSize(swingWidth, swingHeight)
+			bar:SetPoint("TOPLEFT", swingAnchor, "TOPLEFT", 0, spec.yOffset)
+			ApplyBackdrop(bar)
+			bar:SetStatusBarTexture(TEXTURE)
+			bar:SetStatusBarColor(spec.color[1], spec.color[2], spec.color[3])
+			bar.smoothing = smoothInterpolation
+			if direction then
+				bar.direction = direction
+			end
+			bar.showCombat = false
+			bar.checkRange = false
+
+			local bg = bar:CreateTexture(nil, "BORDER")
+			bg:SetAllPoints()
+			bg:SetTexture(TEXTURE)
+			bg:SetVertexColor(spec.color[1] * 0.25, spec.color[2] * 0.25, spec.color[3] * 0.25, 0.4)
+
+			local label = bar:CreateFontString(nil, "OVERLAY")
+			label:SetFont(FONT, fontSize, "OUTLINE")
+			label:SetPoint("LEFT", 4, 0)
+			label:SetTextColor(1, 1, 1, 0.85)
+			label:SetShadowOffset(1, -1)
+			label:SetText(spec.label)
+
+			local timeText = bar:CreateFontString(nil, "OVERLAY")
+			timeText:SetFont(FONT, fontSize, "OUTLINE")
+			timeText:SetPoint("RIGHT", -4, 0)
+			timeText:SetTextColor(1, 1, 1)
+			timeText:SetShadowOffset(1, -1)
+			timeText:SetJustifyH("RIGHT")
+			bar.Time = timeText
+		end
+	end
+end
+
+--===================================================--
 -- Unit-Specific Configurations
 --===================================================--
 
@@ -1426,6 +1519,25 @@ local UnitSpecific = {
 		combat:SetPoint("CENTER", pp, "BOTTOMLEFT", -5, -2)
 		self.CombatIndicator = combat
 
+		local function UpdatePlayerBottomOffsets()
+			local gap = 0
+			local secondaryBars = { self.AdditionalPower, self.Runes, self.ClassPowerBar, self.Stagger }
+			for _, bar in ipairs(secondaryBars) do
+				if bar and bar:IsShown() then
+					bar:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -3 - gap)
+					gap = gap + 11
+				end
+			end
+			if self.Castbar then
+				self.Castbar:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -2 - gap)
+				self.Castbar:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT", 0, -2 - gap)
+			end
+			if self.PlayerDebuffs then
+				self.PlayerDebuffs:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -EXPREPBARGAP - gap + 2)
+				self.PlayerDebuffs:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT", 0, -EXPREPBARGAP - gap + 2)
+			end
+		end
+
 		if playerClass == "DEATHKNIGHT" and oUFRuneBar then
 			local runes = CreateFrame("Frame", nil, self)
 			runes:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -3)
@@ -1461,6 +1573,7 @@ local UnitSpecific = {
 			addPower.frequentUpdates = true
 			addPower.colorPower = true
 			addPower.smoothing = smoothInterpolation
+			CreateCostPrediction(addPower, width)
 
 			local addBg = addPower:CreateTexture(nil, "BORDER")
 			addBg:SetAllPoints()
@@ -1498,19 +1611,77 @@ local UnitSpecific = {
 				end
 			end
 
-			addPower.PostVisibility = function(_, isVisible)
-				local gap = isVisible and 11 or 0
-				if self.Castbar then
-					self.Castbar:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -2 - gap)
-					self.Castbar:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT", 0, -2 - gap)
-				end
-				if self.PlayerDebuffs then
-					self.PlayerDebuffs:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -EXPREPBARGAP - gap + 2)
-					self.PlayerDebuffs:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT", 0, -EXPREPBARGAP - gap + 2)
-				end
+			addPower.PostVisibility = function()
+				UpdatePlayerBottomOffsets()
 			end
 
 			self.AdditionalPower = addPower
+		end
+
+		if enableClassPower and playerClass == "MONK" then
+			local stagger = CreateFrame("StatusBar", nil, self)
+			stagger:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -3)
+			stagger:SetStatusBarTexture(TEXTURE)
+			stagger:SetSize(width, 7)
+			ApplyBackdrop(stagger)
+			stagger.smoothing = smoothInterpolation
+
+			local staggerBg = stagger:CreateTexture(nil, "BORDER")
+			staggerBg:SetAllPoints()
+			staggerBg:SetTexture(TEXTURE)
+			staggerBg:SetAlpha(0.3)
+			stagger.bg = staggerBg
+			stagger.PostUpdateColor = PostUpdateBarColor
+			stagger.PostVisibility = function()
+				UpdatePlayerBottomOffsets()
+			end
+
+			stagger:Hide()
+			self.Stagger = stagger
+		end
+
+		if enableClassPower and playerClass ~= "DEATHKNIGHT" then
+			local classPowerBar = CreateFrame("Frame", nil, self)
+			classPowerBar:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -3)
+			classPowerBar:SetSize(width, 7)
+			ApplyBackdrop(classPowerBar)
+			classPowerBar:Hide()
+			self.ClassPowerBar = classPowerBar
+
+			local cpGap = 2
+			local classPower = {}
+			for i = 1, 10 do
+				local bar = CreateFrame("StatusBar", nil, classPowerBar)
+				bar:SetStatusBarTexture(TEXTURE)
+				bar:SetHeight(7)
+				if i == 1 then
+					bar:SetPoint("TOPLEFT", classPowerBar, "TOPLEFT", 0, 0)
+				else
+					bar:SetPoint("LEFT", classPower[i - 1], "RIGHT", cpGap, 0)
+				end
+				bar:Hide()
+				classPower[i] = bar
+			end
+
+			classPower.PostUpdate = function(element, _, max, _, hasMaxChanged)
+				local validMax = max and not issecretvalue(max) and max > 0
+				classPowerBar:SetShown(not not validMax)
+				if validMax and (hasMaxChanged or not element._sizedMax or element._sizedMax ~= max) then
+					element._sizedMax = max
+					local barWidth = (width - (max - 1) * cpGap) / max
+					for i = 1, 10 do
+						element[i]:SetWidth(barWidth)
+					end
+				end
+				UpdatePlayerBottomOffsets()
+			end
+
+			classPower.PostVisibility = function(_, isVisible)
+				classPowerBar:SetShown(not not isVisible)
+				UpdatePlayerBottomOffsets()
+			end
+
+			self.ClassPower = classPower
 		end
 
 		if not isMaxLevel then
@@ -1533,7 +1704,10 @@ local UnitSpecific = {
 		if playerCastBar then
 			CreateCastbar(self, pp, -2 - MODULEGAP, true)
 		end
+		CreatePrivateAuras(self, 20, "BOTTOMRIGHT", hp, "TOPRIGHT", 0, playerShowBuffs and 30 or 4, "LEFT")
 		CreateTotemBar(self)
+		CreateSwingBars(self)
+		UpdatePlayerBottomOffsets()
 	end,
 
 	pet = function(self)
@@ -1630,6 +1804,8 @@ local UnitSpecific = {
 		summon:SetSize(22, 22)
 		summon:SetPoint("CENTER")
 		self.SummonIndicator = summon
+
+		CreatePrivateAuras(self, 18, "LEFT", self, "RIGHT", 6, 0, "RIGHT")
 	end,
 
 	focus = function(self)
@@ -1793,6 +1969,11 @@ local function Shared(self, unit, isSingle)
 		assistant:SetSize(14, 14)
 		assistant:SetPoint("CENTER", hp, "TOP", 0, 1)
 		self.AssistantIndicator = assistant
+
+		local raidrole = hp:CreateTexture(nil, "OVERLAY")
+		raidrole:SetSize(14, 14)
+		raidrole:SetPoint("CENTER", hp, "TOP", -28, 1)
+		self.RaidRoleIndicator = raidrole
 	end
 
 	local ricon = hp:CreateTexture(nil, "OVERLAY")
