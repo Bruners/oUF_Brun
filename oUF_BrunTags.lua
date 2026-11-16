@@ -2,7 +2,7 @@ local _, ns = ...
 local oUF = ns.oUF or _G.oUF
 assert(oUF, "oUF_Brun requires oUF to be loaded.")
 
-local issecretvalue = _G.issecretvalue
+local issecretvalue = _G.issecretvalue or function() return false end
 local isForever = (WOW_PROJECT_ID == WOW_PROJECT_CAMELOT) or (GameVersion and GameVersion.Forever)
 local CreateAbbreviateConfig, AbbreviateNumbers = _G.CreateAbbreviateConfig, _G.AbbreviateNumbers
 local WrapString = C_StringUtil and C_StringUtil.WrapString
@@ -80,7 +80,10 @@ RegisterTag("brunhp", "UNIT_HEALTH UNIT_MAXHEALTH UNIT_CONNECTION", function(u)
 	local m, n = UnitHealthMax(u), UnitHealth(u)
 	if not m then return end
 	if issecretvalue(m) or issecretvalue(n) then
-		return string.format("%s | %d%%", siValue(n), UnitHealthPercent(u, true, CurveConstants.ScaleTo100))
+		if UnitHealthPercent and CurveConstants and CurveConstants.ScaleTo100 then
+			return string.format("%s | %d%%", siValue(n), UnitHealthPercent(u, true, CurveConstants.ScaleTo100))
+		end
+		return siValue(n)
 	end
 	return m == 0 and 0
 		or (not UnitIsFriend("player", u) and string.format("%s | %d%%", siValue(n), n / m * 100))
@@ -96,8 +99,11 @@ RegisterTag("brunminushp", "UNIT_HEALTH UNIT_MAXHEALTH UNIT_CONNECTION", functio
 	local m, n = UnitHealthMax(u), UnitHealth(u)
 	if not m then return end
 	if issecretvalue(m) or issecretvalue(n) then
-		local missing = UnitHealthMissing(u)
-		return FormatZero(missing, string.format("|cffff8585-%s|r", siValue(missing)))
+		local missing = UnitHealthMissing and UnitHealthMissing(u)
+		if missing then
+			return FormatZero(missing, string.format("|cffff8585-%s|r", siValue(missing)))
+		end
+		return siValue(n)
 	end
 	return m == 0 and 0
 		or n ~= m and string.format("|cffff8585-%s|r", siValue(m - n))
@@ -121,7 +127,9 @@ local function GetFormattedUnitName(u, r, maxChars, dots)
 	if not unit or not UnitExists(unit) then return "" end
 
 	local baseName = (UnitNameUnmodified and UnitNameUnmodified(unit)) or UnitName(unit)
-	if not baseName or baseName == "" then return "" end
+	if not baseName then return "" end
+	if issecretvalue(baseName) then return baseName end
+	if baseName == "" then return "" end
 
 	if isForever and ns.firstNameOnly and (UnitIsPlayer(unit) or (UnitInPartyIsAI and UnitInPartyIsAI(unit))) then
 		return utf8sub(baseName, maxChars, dots)
@@ -137,7 +145,7 @@ local function GetFormattedUnitName(u, r, maxChars, dots)
 	end
 
 	local name = baseName
-	if type(fullName) == "string" and fullName ~= "" then
+	if type(fullName) == "string" and not issecretvalue(fullName) and fullName ~= "" then
 		-- Deduplicate if Forever engine returned "First First" for characters without surnames
 		local first, last = fullName:match("^(%S+)%s+(%S+)$")
 		if first and last and first == last then
@@ -154,7 +162,7 @@ end
 
 RegisterTag("ShortName", "UNIT_NAME_UPDATE GROUP_ROSTER_UPDATE UNIT_CONNECTION PARTY_MEMBER_ENABLE PARTY_MEMBER_DISABLE", function(u, r)
 	local name = GetFormattedUnitName(u, r, 8, false)
-	if type(name) == "string" then
+	if type(name) == "string" and not issecretvalue(name) then
 		local first = name:match("^(%S+)")
 		if first then name = first end
 	end

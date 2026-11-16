@@ -7,7 +7,7 @@ local addonName, ns = ...
 local oUF = ns.oUF or _G.oUF
 assert(oUF, "oUF_Brun requires oUF to be loaded.")
 
-local issecretvalue = _G.issecretvalue
+local issecretvalue = _G.issecretvalue or function() return false end
 local nop = _G.nop or function() end
 local smoothInterpolation = Enum.StatusBarInterpolation.ExponentialEaseOut
 local playerClass = UnitClassBase("player")
@@ -1331,12 +1331,14 @@ local function CreateTotemBar(self)
 				end
 				totem:Show()
 
-				button:ClearAllPoints()
-				button:SetParent(totem)
-				button:SetAllPoints(totem)
+				if not InCombatLockdown() then
+					button:ClearAllPoints()
+					button:SetParent(totem)
+					button:SetAllPoints(totem)
+					button:SetFrameLevel(totem:GetFrameLevel() + 3)
+					button:EnableMouse(true)
+				end
 				button:SetAlpha(0)
-				button:SetFrameLevel(totem:GetFrameLevel() + 3)
-				button:EnableMouse(true)
 			else
 				totem.Icon:SetTexture(nil)
 				if totem.Time.binding then
@@ -1687,10 +1689,10 @@ local function Shared(self, unit, isSingle)
 
 	ApplyBackdrop(self)
 	self:SetSize(frameWidth, frameHeight)
-	if not isSingle and unit ~= "partytarget" then
+	if (unit == "party" or unit == "raid" or not isSingle) and unit ~= "partytarget" then
 		self.Range = {
 			insideAlpha = 1,
-			outsideAlpha = 0.5,
+			outsideAlpha = 0.45,
 		}
 	end
 
@@ -1922,7 +1924,7 @@ local function SpawnFrames(self)
 		RuneFrame:Show()
 	end
 
-	local partySpacing = 48
+	local partySpacing = 62
 	local partyGroupHeight = partyHeight * 4 + partySpacing * 3
 	local partyGroup = CreateFrame("Frame", "oUF_BrunPartyGroup", UIParent, "SecureHandlerStateTemplate")
 	local partyAnchor = CreatePositionAnchor("Party", partyWidth, partyGroupHeight, oUF_Brun.Party)
@@ -1942,12 +1944,12 @@ local function SpawnFrames(self)
 		prevParty = partyFrame
 
 		partyFrame:RegisterEvent("GROUP_ROSTER_UPDATE", function(frame)
-			if UnitExists(frame.__unit) then
+			if frame.__unit and UnitExists(frame.__unit) then
 				frame:UpdateAllElements("GROUP_ROSTER_UPDATE")
 			end
 		end, true)
 		partyFrame:RegisterEvent("UNIT_CONNECTION", function(frame)
-			if UnitExists(frame.__unit) then
+			if frame.__unit and UnitExists(frame.__unit) then
 				frame:UpdateAllElements("UNIT_CONNECTION")
 			end
 		end, true)
