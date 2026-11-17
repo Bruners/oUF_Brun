@@ -39,6 +39,8 @@ local firstNameOnly = false				-- Show only first name (hide WoW Forever surname
 local enableFader = true				-- Fade out Player and Pet frames when out of combat with no target.
 local fadeOutAlpha = 0.35				-- Alpha value for faded Player/Pet frames when idle.
 local showBossFrames = true				-- Spawn Boss1..MAX_BOSS_FRAMES frames.
+local showTargetTarget = true			-- Spawn Target of Target (ToT) frame.
+local showTargetTargetTarget = true		-- Spawn Target of Target's Target (ToToT) frame.
 local enableTotemBar = true				-- Style and anchor clickable TotemFrame icons above Player/Pet.
 local enableSwingBar = true				-- Show player melee/ranged swing timer bars.
 local enableClassPower = true			-- Show player ClassPower (Combo Points, Holy Power, etc.) & Monk Stagger bars.
@@ -799,6 +801,8 @@ local DEFAULT_OPTIONS = {
 	hideSelfInfo = hideSelfInfo,
 	hidePartyInRaid = hidePartyInRaid,
 	showBossFrames = showBossFrames,
+	showTargetTarget = showTargetTarget,
+	showTargetTargetTarget = showTargetTargetTarget,
 	enableTotemBar = enableTotemBar,
 	hideCompactRaidManager = hideCompactRaidManager,
 	oUFRuneBar = oUFRuneBar,
@@ -851,6 +855,8 @@ local function ApplySavedOptions()
 	hideSelfInfo = opts.hideSelfInfo
 	hidePartyInRaid = opts.hidePartyInRaid
 	showBossFrames = opts.showBossFrames
+	showTargetTarget = (opts.showTargetTarget ~= false)
+	showTargetTargetTarget = (opts.showTargetTargetTarget ~= false)
 	enableTotemBar = opts.enableTotemBar
 	enableSwingBar = (opts.enableSwingBar ~= false)
 	enableClassPower = (opts.enableClassPower ~= false)
@@ -1020,7 +1026,7 @@ local function ToggleConfigGUI()
 	scrollFrame:SetPoint("BOTTOMRIGHT", -32, 46)
 
 	local content = CreateFrame("Frame", nil, scrollFrame)
-	content:SetSize(360, 680)
+	content:SetSize(360, 780)
 	scrollFrame:SetScrollChild(content)
 
 	local optionSections = {
@@ -1032,6 +1038,8 @@ local function ToggleConfigGUI()
 				{ key = "enableHealthPrediction", label = "Incoming Heal & Absorb Shields" },
 				{ key = "enableThreatHighlight", label = "Aggro / Threat Backdrop Highlight" },
 				{ key = "hideSelfInfo", label = "Hide Player Name & Level at Max Level" },
+				{ key = "showTargetTarget", label = "Show Target of Target (ToT)" },
+				{ key = "showTargetTargetTarget", label = "Show Target of Target's Target (ToToT)" },
 				{ key = "showMinimapIcon", label = "Show Minimap Quick Toggle Icon" },
 			},
 		},
@@ -2066,11 +2074,15 @@ local function SpawnFrames(self)
 	local targetAnchor = CreatePositionAnchor("Target", width, height, oUF_Brun.Target)
 	self:Spawn("target", "oUF_target"):SetPoint("CENTER", targetAnchor, "CENTER", 0, 0)
 
-	local totAnchor = CreatePositionAnchor("ToT", targetTargetWidth, targetTargetHeight, oUF_Brun.ToT)
-	self:Spawn("targettarget", "oUF_TargetTarget"):SetPoint("CENTER", totAnchor, "CENTER", 0, 0)
+	if showTargetTarget then
+		local totAnchor = CreatePositionAnchor("ToT", targetTargetWidth, targetTargetHeight, oUF_Brun.ToT)
+		self:Spawn("targettarget", "oUF_TargetTarget"):SetPoint("CENTER", totAnchor, "CENTER", 0, 0)
+	end
 
-	local tototAnchor = CreatePositionAnchor("ToToT", targetTargetWidth, targetTargetHeight, oUF_Brun.ToToT)
-	self:Spawn("targettargettarget", "oUF_ToToT"):SetPoint("CENTER", tototAnchor, "CENTER", 0, 0)
+	if showTargetTargetTarget then
+		local tototAnchor = CreatePositionAnchor("ToToT", targetTargetWidth, targetTargetHeight, oUF_Brun.ToToT)
+		self:Spawn("targettargettarget", "oUF_ToToT"):SetPoint("CENTER", tototAnchor, "CENTER", 0, 0)
+	end
 
 	local focusAnchor = CreatePositionAnchor("Focus", focusWidth, focusHeight, oUF_Brun.Focus)
 	self:Spawn("focus", "oUF_Focus"):SetPoint("CENTER", focusAnchor, "CENTER", 0, 0)
