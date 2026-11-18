@@ -23,7 +23,7 @@ jobs:
           fetch-depth: 0
 
       - name: Determine release version
-        id: version
+        id: versionss
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             INPUT_VER="${{ github.event.inputs.version }}"

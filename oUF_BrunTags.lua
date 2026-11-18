@@ -180,8 +180,27 @@ RegisterTag("afkdnd", "PLAYER_FLAGS_CHANGED", function(u)
 	return isAFK and "|cffffff00<A>|r" or isDND and "|cffffff00<D>|r"
 end)
 
+local SHORT_RACE_NAMES = {
+	["Windshaper Skyborne"] = "Skyborne",
+	["High Order Skyborne"] = "Skyborne",
+	["Lightforged Draenei"] = "LF Draenei",
+	["Highmountain Tauren"] = "HM Tauren",
+	["Dark Iron Dwarf"] = "DI Dwarf",
+	["Zandalari Troll"] = "Za Troll",
+	["Not specified"] = "Unknown",
+	["Non-combat Pet"] = "Critter",
+}
+
 RegisterTag("smarterrace", "UNIT_NAME_UPDATE GROUP_ROSTER_UPDATE", function(u)
-	return (UnitIsPlayer(u) and UnitRace(u)) or UnitCreatureFamily(u) or UnitCreatureType(u)
+	local race = (UnitIsPlayer(u) and UnitRace(u)) or UnitCreatureFamily(u) or UnitCreatureType(u)
+	if ns.shortRaceNames and type(race) == "string" and not issecretvalue(race) then
+		if SHORT_RACE_NAMES[race] then
+			return SHORT_RACE_NAMES[race]
+		elseif race:find("Skyborne", 1, true) then
+			return "Skyborne"
+		end
+	end
+	return race
 end)
 
 local function GetGreenRange()

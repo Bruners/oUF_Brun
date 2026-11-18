@@ -36,6 +36,7 @@ local enableHealthPrediction = true		-- Enable/Disable incoming heal and absorb 
 local enableThreatHighlight = true		-- Enable/Disable backdrop aggro highlight on threat.
 local desaturateOtherDebuffs = true		-- Desaturate non-player debuffs on Target/Boss and sort player debuffs first.
 local firstNameOnly = false				-- Show only first name (hide WoW Forever surname) on all player unit frames.
+local shortRaceNames = true				-- Shorten compound Forever race names (e.g. "Windshaper Skyborne" -> "Skyborne").
 local enableFader = true				-- Fade out Player and Pet frames when out of combat with no target.
 local fadeOutAlpha = 0.35				-- Alpha value for faded Player/Pet frames when idle.
 local showBossFrames = true				-- Spawn Boss1..MAX_BOSS_FRAMES frames.
@@ -48,6 +49,7 @@ local hideCompactRaidManager = true		-- Auto-fade the collapsed Blizzard Raid Ma
 local highlightExpiringAuras = true		-- Highlight aura timer numbers in yellow/red when expiring (<=10s / <=5s).
 
 ns.firstNameOnly = firstNameOnly
+ns.shortRaceNames = shortRaceNames
 
 local FONT_SIZE = 14					-- Largest font on frames (most frames)
 local SMALL_FONT_SIZE = 12				-- Smallest font on frames (target's target)
@@ -84,7 +86,7 @@ local petHeight, petWidth = 15, 152
 local petShowAura = true
 local petCastBar = true
 
-local focusHeight, focusWidth = 20, 200
+local focusHeight, focusWidth = 30, 200
 local focusShowBuffs = true
 local focusShowDebuffs = true
 local focusBuffSize = 20
@@ -795,6 +797,7 @@ local manualMoversUnlocked = false
 local DEFAULT_OPTIONS = {
 	enableFader = enableFader,
 	firstNameOnly = firstNameOnly,
+	shortRaceNames = shortRaceNames,
 	desaturateOtherDebuffs = desaturateOtherDebuffs,
 	enableHealthPrediction = enableHealthPrediction,
 	enableThreatHighlight = enableThreatHighlight,
@@ -849,6 +852,8 @@ local function ApplySavedOptions()
 	enableFader = opts.enableFader
 	firstNameOnly = opts.firstNameOnly
 	ns.firstNameOnly = firstNameOnly
+	shortRaceNames = (opts.shortRaceNames ~= false)
+	ns.shortRaceNames = shortRaceNames
 	desaturateOtherDebuffs = opts.desaturateOtherDebuffs
 	enableHealthPrediction = opts.enableHealthPrediction
 	enableThreatHighlight = opts.enableThreatHighlight
@@ -1035,6 +1040,7 @@ local function ToggleConfigGUI()
 			options = {
 				{ key = "enableFader", label = "Fade Player & Pet out of combat" },
 				{ key = "firstNameOnly", label = "First Name Only (hide Forever surnames)" },
+				{ key = "shortRaceNames", label = "Shorten Long Race & Creature Names" },
 				{ key = "enableHealthPrediction", label = "Incoming Heal & Absorb Shields" },
 				{ key = "enableThreatHighlight", label = "Aggro / Threat Backdrop Highlight" },
 				{ key = "hideSelfInfo", label = "Hide Player Name & Level at Max Level" },
@@ -1104,7 +1110,7 @@ local function ToggleConfigGUI()
 				local checked = self:GetChecked() and true or false
 				GetOptionsDB()[def.key] = checked
 				ApplySavedOptions()
-				if def.key == "firstNameOnly" then
+				if def.key == "firstNameOnly" or def.key == "shortRaceNames" then
 					for _, obj in ipairs(oUF.objects) do
 						if obj.UpdateTags then obj:UpdateTags() end
 					end
@@ -1818,7 +1824,7 @@ local UnitSpecific = {
 
 	focus = function(self)
 		if focusCastBar then
-			CreateCastbar(self, self.Health, -2, false)
+			CreateCastbar(self, self.Power, -2, false)
 		end
 		if focusShowBuffs then
 			local buffs = CreateAuraWidget(self, "HELPFUL", focusWidth, focusBuffSize, focusBuffSpacing, "LEFT", "UP")
@@ -1843,14 +1849,14 @@ local function Shared(self, unit, isSingle)
 	unit = unit and unit:gsub("%d+$", "") or unit
 	local isPartySubUnit = (unit == "partypet" or unit == "partytarget")
 	local isTargetTarget = (unit == "targettarget" or unit == "targettargettarget" or unit == "focustarget")
-	local hasPowerBar = (unit ~= "focus" and unit ~= "focustarget" and not isPartySubUnit)
+	local hasPowerBar = not isPartySubUnit
 	local fontSize = isTargetTarget and SMALL_FONT_SIZE or FONT_SIZE
 
 	local frameWidth, frameHeight = width, height
 	local hpHeight, ppHeight = height * 0.6, height * 0.4
 	if unit == "focustarget" then
 		frameWidth, frameHeight = partyPetAndTargetWidth + 30, focusHeight
-		hpHeight = focusHeight
+		hpHeight, ppHeight = focusHeight * 0.6, focusHeight * 0.4
 	elseif isTargetTarget then
 		frameWidth, frameHeight = targetTargetWidth, targetTargetHeight
 		hpHeight, ppHeight = targetTargetHeight * 0.6, targetTargetHeight * 0.4
@@ -1859,7 +1865,7 @@ local function Shared(self, unit, isSingle)
 		hpHeight, ppHeight = petHeight * 0.8, petHeight * 0.2
 	elseif unit == "focus" then
 		frameWidth, frameHeight = focusWidth, focusHeight
-		hpHeight = focusHeight
+		hpHeight, ppHeight = focusHeight * 0.6, focusHeight * 0.4
 	elseif isPartySubUnit then
 		hpHeight = partyPetAndTargetHeight
 	elseif unit == "party" or unit == "boss" then
