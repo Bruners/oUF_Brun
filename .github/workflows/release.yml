@@ -23,7 +23,7 @@ jobs:
           fetch-depth: 0
 
       - name: Determine release version
-        id: versionss
+        id: version
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             INPUT_VER="${{ github.event.inputs.version }}"
@@ -35,11 +35,19 @@ jobs:
           else
             VER="${GITHUB_REF_NAME#v}"
           fi
+          if [[ -z "$VER" ]]; then
+            echo "Error: empty version" >&2
+            exit 1
+          fi
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
 
       - name: Package addon zip
         run: |
           VER="${{ steps.version.outputs.version }}"
+          if [[ -z "$VER" ]]; then
+            echo "Error: empty version" >&2
+            exit 1
+          fi
           mkdir -p stage
           git archive --format=tar --prefix=oUF_Brun/ HEAD | tar -x -C stage
           sed -i -E "s/^## Version:.*/## Version: ${VER}/" stage/oUF_Brun/oUF_Brun.toc
@@ -49,7 +57,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: oUF_Brun v${{ steps.version.outputs.version }}
-          files: oUF_Brun-${{ steps.version.outputs.version }}.zip
+          tag_name: "v${{ steps.version.outputs.version }}"
+          name: "oUF: Brun Forever v${{ steps.version.outputs.version }}"
+          files: "oUF_Brun-${{ steps.version.outputs.version }}.zip"
           generate_release_notes: true
