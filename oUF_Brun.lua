@@ -47,6 +47,7 @@ local enableSwingBar = true				-- Show player melee/ranged swing timer bars.
 local enableClassPower = true			-- Show player ClassPower (Combo Points, Holy Power, etc.) & Monk Stagger bars.
 local hideCompactRaidManager = true		-- Auto-fade the collapsed Blizzard Raid Manager tab until mouseover.
 local highlightExpiringAuras = true		-- Highlight aura timer numbers in yellow/red when expiring (<=10s / <=5s).
+local highlightDispellableDebuffs = true	-- Highlight and prioritize debuffs the player's class can dispel.
 
 ns.firstNameOnly = firstNameOnly
 ns.shortRaceNames = shortRaceNames
@@ -293,7 +294,7 @@ local function StyleAuraButton(element, button, options)
 		end
 	end
 
-	local overlay = button:CreateTexture(nil, "OVERLAY")
+	local overlay = button:CreateTexture(nil, "OVERLAY", nil, 1)
 	overlay:SetPoint("TOPLEFT", -2.5, 2.5)
 	overlay:SetPoint("BOTTOMRIGHT", 2.5, -2.5)
 	overlay:SetTexture(BORDER_TEXTURE)
@@ -301,13 +302,54 @@ local function StyleAuraButton(element, button, options)
 	overlay:SetBlendMode("BLEND")
 	button.ButtonOverlay = overlay
 
-	local gloss = button:CreateTexture(nil, "OVERLAY")
+	local gloss = button:CreateTexture(nil, "OVERLAY", nil, 2)
 	gloss:SetPoint("TOPLEFT", -3, 3)
 	gloss:SetPoint("BOTTOMRIGHT", 3, -3)
 	gloss:SetTexture(GLOSS_TEXTURE)
 	gloss:SetVertexColor(0.84, 0.75, 0.65)
 	gloss:SetBlendMode("ADD")
 	button.ButtonGloss = gloss
+
+	if options and options.highlightDispellable and button.AddDispelTypeTexture then
+		local styleEnum = Enum.CustomAuraButtonDispelTypeTextureStyle
+		local preserveStyle = styleEnum and styleEnum.PreserveAsset
+		local iconStyle = styleEnum and styleEnum.Icon
+		local colorMap = element.__owner and element.__owner.colors and element.__owner.colors.dispel
+
+		local dispelOverlay = button:CreateTexture(nil, "OVERLAY", nil, 3)
+		dispelOverlay:SetPoint("TOPLEFT", -2.5, 2.5)
+		dispelOverlay:SetPoint("BOTTOMRIGHT", 2.5, -2.5)
+		dispelOverlay:SetTexture(BORDER_TEXTURE)
+		local overlayOk = pcall(button.AddDispelTypeTexture, button, dispelOverlay, {
+			style = preserveStyle,
+			showWhenHarmful = true,
+			customDispelColorMap = colorMap,
+		})
+		if not overlayOk then
+			overlayOk = pcall(button.AddDispelTypeTexture, button, dispelOverlay, {
+				style = preserveStyle,
+				showWhenHarmful = true,
+			})
+		end
+		if overlayOk then
+			button.DispelOverlay = dispelOverlay
+		else
+			dispelOverlay:Hide()
+		end
+
+		local badgeSize = math.max(10, math.floor(elemSize * 0.55))
+		local dispelIndicator = button:CreateTexture(nil, "OVERLAY", nil, 7)
+		dispelIndicator:SetPoint("CENTER", button, "TOPRIGHT")
+		dispelIndicator:SetSize(badgeSize, badgeSize)
+		if pcall(button.AddDispelTypeTexture, button, dispelIndicator, {
+			style = iconStyle,
+			showWhenHarmful = true,
+		}) then
+			button.DispelIndicator = dispelIndicator
+		else
+			dispelIndicator:Hide()
+		end
+	end
 end
 
 -- Create an oUF 14 intrinsic AuraContainer with the requested filter and layout geometry.
@@ -336,7 +378,6 @@ local function CreateAuraWidget(self, filter, frameWidth, iconSize, spacing, gro
 	if highlightExpiringAuras and auraDurationColors then
 		element.durationColors = auraDurationColors
 	end
-	element.showDebuffBorder = (filter ~= "HELPFUL")
 	if filter == "HELPFUL" then
 		element.cancelButton = "RightButtonUp"
 		element.showStealableBorder = true
@@ -345,7 +386,19 @@ local function CreateAuraWidget(self, filter, frameWidth, iconSize, spacing, gro
 
 	if filter == "BOTH" then
 		element:AddGroup("HELPFUL")
-		element:AddGroup("HARMFUL")
+		if highlightDispellableDebuffs then
+			element:AddGroup("HARMFUL|RAID", {
+				highlightDispellable = true,
+			})
+			element:AddGroup("HARMFUL|!RAID")
+		else
+			element:AddGroup("HARMFUL")
+		end
+	elseif filter == "HARMFUL" and highlightDispellableDebuffs then
+		element:AddGroup("HARMFUL|RAID", {
+			highlightDispellable = true,
+		})
+		element:AddGroup("HARMFUL|!RAID")
 	elseif filter == "TARGET_DEBUFFS" then
 		element:AddGroup("HARMFUL|PLAYER")
 		element:AddGroup("HARMFUL|!PLAYER", {
@@ -822,6 +875,7 @@ local DEFAULT_OPTIONS = {
 	partyShowBuffs = partyShowBuffs,
 	partyShowDebuffs = partyShowDebuffs,
 	highlightExpiringAuras = highlightExpiringAuras,
+	highlightDispellableDebuffs = highlightDispellableDebuffs,
 	enableSwingBar = enableSwingBar,
 	enableClassPower = enableClassPower,
 	showMinimapIcon = true,
@@ -880,6 +934,7 @@ local function ApplySavedOptions()
 	partyShowBuffs = opts.partyShowBuffs
 	partyShowDebuffs = opts.partyShowDebuffs
 	highlightExpiringAuras = (opts.highlightExpiringAuras ~= false) and (opts.enlargeLowDurationBuffs ~= false)
+	highlightDispellableDebuffs = (opts.highlightDispellableDebuffs ~= false)
 
 	if minimapButton then
 		minimapButton:SetShown(opts.showMinimapIcon ~= false)
@@ -1065,6 +1120,7 @@ local function ToggleConfigGUI()
 			title = "Castbars & Auras",
 			options = {
 				{ key = "desaturateOtherDebuffs", label = "Prioritize Player Debuffs & desaturate others" },
+				{ key = "highlightDispellableDebuffs", label = "Highlight Dispellable Debuffs (Player Class)" },
 				{ key = "playerCastBar", label = "Show Player Castbar" },
 				{ key = "enableSwingBar", label = "Show Player Swing Timer Bar" },
 				{ key = "targetCastBar", label = "Show Target Castbar" },
@@ -1577,7 +1633,8 @@ local UnitSpecific = {
 			MODULEGAP = 11
 		end
 
-		if playerClass == "DRUID" or playerClass == "PRIEST" or playerClass == "SHAMAN" then
+		if (ALT_POWER_BAR_PAIR_DISPLAY_INFO and ALT_POWER_BAR_PAIR_DISPLAY_INFO[playerClass])
+			or playerClass == "DRUID" or playerClass == "PRIEST" or playerClass == "SHAMAN" or playerClass == "MONK" or playerClass == "EVOKER" then
 			local addPower = CreateFrame("StatusBar", nil, self)
 			addPower:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -3)
 			addPower:SetStatusBarTexture(TEXTURE)
@@ -1646,7 +1703,31 @@ local UnitSpecific = {
 			staggerBg:SetAlpha(0.3)
 			stagger.bg = staggerBg
 			stagger.PostUpdateColor = PostUpdateBarColor
-			stagger.PostVisibility = function()
+
+			local staggerText = stagger:CreateFontString(nil, "OVERLAY")
+			staggerText:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+			staggerText:SetPoint("CENTER")
+			staggerText:SetTextColor(1, 1, 1)
+			stagger.Text = staggerText
+
+			stagger.PostUpdate = function(element, cur, max)
+				if not element:IsShown() or not cur then
+					element.Text:SetText("")
+					return
+				end
+				if issecretvalue(cur) or issecretvalue(max) then
+					element.Text:SetFormattedText("%s", ns.FormatZero(cur, ns.siValue(cur)))
+				elseif max and max > 0 and cur > 0 then
+					element.Text:SetFormattedText("%s - %d%%", ns.siValue(cur), math.floor(cur / max * 100))
+				else
+					element.Text:SetText("")
+				end
+			end
+
+			stagger.PostVisibility = function(_, isVisible)
+				if not isVisible and stagger.Text then
+					stagger.Text:SetText("")
+				end
 				UpdatePlayerBottomOffsets()
 			end
 
@@ -1673,11 +1754,36 @@ local UnitSpecific = {
 				else
 					bar:SetPoint("LEFT", classPower[i - 1], "RIGHT", cpGap, 0)
 				end
+
+				local bg = bar:CreateTexture(nil, "BORDER")
+				bg:SetAllPoints()
+				bg:SetTexture(TEXTURE)
+				bg:SetAlpha(0.28)
+				bar.bg = bg
+
+				local charge = bar:CreateTexture(nil, "OVERLAY")
+				charge:SetAllPoints()
+				charge:SetTexture(TEXTURE)
+				charge:SetBlendMode("ADD")
+				charge:SetVertexColor(0.35, 0.85, 1, 0.45)
+				charge:Hide()
+				bar.ChargeOverlay = charge
+
 				bar:Hide()
 				classPower[i] = bar
 			end
 
-			classPower.PostUpdate = function(element, _, max, _, hasMaxChanged)
+			classPower.PostUpdateColor = function(element, color)
+				if not color then return end
+				local r, g, b = color:GetRGB()
+				for i = 1, 10 do
+					if element[i] and element[i].bg then
+						element[i].bg:SetVertexColor(r, g, b)
+					end
+				end
+			end
+
+			classPower.PostUpdate = function(element, _, max, _, hasMaxChanged, _, ...)
 				local validMax = max and not issecretvalue(max) and max > 0
 				classPowerBar:SetShown(not not validMax)
 				if validMax and (hasMaxChanged or not element._sizedMax or element._sizedMax ~= max) then
@@ -1685,6 +1791,17 @@ local UnitSpecific = {
 					local barWidth = (width - (max - 1) * cpGap) / max
 					for i = 1, 10 do
 						element[i]:SetWidth(barWidth)
+					end
+				end
+				for i = 1, 10 do
+					if element[i].ChargeOverlay then
+						element[i].ChargeOverlay:Hide()
+					end
+				end
+				for i = 1, select("#", ...) do
+					local chargedIndex = select(i, ...)
+					if chargedIndex and not issecretvalue(chargedIndex) and element[chargedIndex] and element[chargedIndex].ChargeOverlay then
+						element[chargedIndex].ChargeOverlay:Show()
 					end
 				end
 				UpdatePlayerBottomOffsets()
@@ -1746,7 +1863,7 @@ local UnitSpecific = {
 
 	target = function(self)
 		local hp, pp = self.Health, self.Power
-		if playerClass == "ROGUE" or playerClass == "DRUID" then
+		if not enableClassPower and (playerClass == "ROGUE" or playerClass == "DRUID") then
 			self.CPoints = {}
 			for i = 1, 5 do
 				local dot = pp:CreateTexture(nil, "OVERLAY")
