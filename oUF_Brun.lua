@@ -67,7 +67,7 @@ local COMBO = "Interface\\Addons\\oUF_Brun\\textures\\pb4combo"
 
 local height, width = 35, 252			-- Default frame height and width used by several frames.
 
-local playerShowBuffs = false
+local playerShowBuffs = true
 local playerShowDebuffs = true
 local playerBuffsSize = 23
 local playerDebuffSize = 23
@@ -1260,7 +1260,7 @@ local function ApplySavedOptions()
 	playerCastBar = opts.playerCastBar
 	targetCastBar = opts.targetCastBar
 	focusCastBar = opts.focusCastBar
-	playerShowBuffs = opts.playerShowBuffs
+	playerShowBuffs = (opts.playerShowBuffs ~= false)
 	playerShowDebuffs = opts.playerShowDebuffs
 	targetShowBuffs = opts.targetShowBuffs
 	targetShowDebuffs = opts.targetShowDebuffs
