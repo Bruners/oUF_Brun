@@ -1,6 +1,6 @@
 --[[-------------------------------------------------------------------------
-  Lasse G. Brun grants anyone the right to use this work for any purpose,
-  without any conditions, unless such conditions are required by law.
+  Copyright (c) Lasse G. Brun. All rights reserved.
+  Licensed under the MIT License. See LICENSE in the project root.
 ---------------------------------------------------------------------------]]
 
 local addonName, ns = ...
@@ -23,6 +23,7 @@ local oUF_Brun = {
 	ToT = { "LEFT", "oUF_player", "RIGHT", 14, 5 },
 	ToToT = { "LEFT", "oUF_player", "RIGHT", 14, -28 },
 	Party = { "TOPLEFT", UIParent, "TOPLEFT", 20, -50 },
+	Raid = { "TOPLEFT", UIParent, "TOPLEFT", 20, -410 },
 	Boss = { "RIGHT", UIParent, "RIGHT", -50, 150 },
 	Runeframe = { "TOPLEFT", "oUF_player", "BOTTOMLEFT", 0, -20 },
 	Swing = { "CENTER", UIParent, "CENTER", 0, -295 },
@@ -48,6 +49,8 @@ local enableClassPower = true			-- Show player ClassPower (Combo Points, Holy Po
 local hideCompactRaidManager = true		-- Auto-fade the collapsed Blizzard Raid Manager tab until mouseover.
 local highlightExpiringAuras = true		-- Highlight aura timer numbers in yellow/red when expiring (<=10s / <=5s).
 local highlightDispellableDebuffs = true	-- Highlight and prioritize debuffs the player's class can dispel.
+local showRaidFrames = true				-- Spawn 8-group compact raid grid inside raid groups.
+local enableClickCast = false			-- Enable HealKit-style click-casting (M1/M2 heal, M3 dispel) on Party & Raid frames.
 
 ns.firstNameOnly = firstNameOnly
 ns.shortRaceNames = shortRaceNames
@@ -106,6 +109,9 @@ local partyDebuffSpacing = 2
 
 local partyPetAndTargetHeight = 15
 local partyPetAndTargetWidth = 95
+
+local raidWidth, raidHeight = 85, 24
+local RAID_FONT_SIZE = 10
 
 local MODULEGAP = 0
 local EXPREPBARGAP = 21
@@ -353,7 +359,7 @@ local function StyleAuraButton(element, button, options)
 end
 
 -- Create an oUF 14 intrinsic AuraContainer with the requested filter and layout geometry.
-local function CreateAuraWidget(self, filter, frameWidth, iconSize, spacing, growthX, growthY)
+local function CreateAuraWidget(self, filter, frameWidth, iconSize, spacing, growthX, growthY, extraOpts)
 	local initialAnchor = (growthY == "UP" and "BOTTOM" or "TOP") .. (growthX == "LEFT" and "RIGHT" or "LEFT")
 	local createAuras = self.CreateAurasElement or self.CreateAuras
 	local element = createAuras(self, {
@@ -364,7 +370,7 @@ local function CreateAuraWidget(self, filter, frameWidth, iconSize, spacing, gro
 	})
 	element:SetSize(frameWidth, iconSize)
 	element.size = iconSize
-	element.maxFrameCount = math.floor(frameWidth / iconSize + 0.5)
+	element.maxFrameCount = (extraOpts and extraOpts.maxFrameCount) or math.floor(frameWidth / iconSize + 0.5)
 	element.elementSpacing = spacing
 	element.lineSpacing = spacing
 	element.groupSpacing = spacing
@@ -372,6 +378,17 @@ local function CreateAuraWidget(self, filter, frameWidth, iconSize, spacing, gro
 	element.forceNewLine = false
 	element.showCount = true
 	element.showDuration = true
+	if extraOpts then
+		if extraOpts.disableMouse then
+			element.disableMouse = true
+			if element.EnableMouse then
+				element:EnableMouse(false)
+			end
+		end
+		if extraOpts.frameLevel then
+			element:SetFrameLevel(extraOpts.frameLevel)
+		end
+	end
 	if auraDurationFormatter then
 		element.durationFormatter = auraDurationFormatter
 	end
@@ -399,6 +416,10 @@ local function CreateAuraWidget(self, filter, frameWidth, iconSize, spacing, gro
 			highlightDispellable = true,
 		})
 		element:AddGroup("HARMFUL|!RAID")
+	elseif filter == "HARMFUL|RAID" then
+		element:AddGroup("HARMFUL|RAID", {
+			highlightDispellable = true,
+		})
 	elseif filter == "TARGET_DEBUFFS" then
 		element:AddGroup("HARMFUL|PLAYER")
 		element:AddGroup("HARMFUL|!PLAYER", {
@@ -841,6 +862,316 @@ do
 end
 
 --===================================================--
+-- HealKit-Style Click-Casting (Party & Raid Frames)
+--===================================================--
+
+local RegisterClickCastFrame
+local UpdateAllClickCastFrames
+
+do
+	local CLICKCAST_SPELL_IDS = {
+		-- Priest
+		["Flash Heal"] = 2061,
+		["Heal"] = { 2054, 2060 },
+		["Lesser Heal"] = 2050,
+		["Renew"] = 139,
+		["Power Word: Shield"] = 17,
+		["Greater Heal"] = 2060,
+		["Penance"] = { 402261, 47540 },
+		["Prayer of Mending"] = { 401859, 33076 },
+		["Power Word: Radiance"] = 194509,
+		["Purify"] = 527,
+		["Dispel Magic"] = 527,
+		["Purify Disease"] = 213634,
+		["Abolish Disease"] = 552,
+		["Cure Disease"] = 528,
+		["Resurrection"] = 2006,
+		-- Druid
+		["Regrowth"] = 8936,
+		["Healing Touch"] = 5185,
+		["Rejuvenation"] = 774,
+		["Lifebloom"] = 33763,
+		["Swiftmend"] = 18562,
+		["Wild Growth"] = { 408120, 48438 },
+		["Nature's Cure"] = 88423,
+		["Remove Corruption"] = 2782,
+		["Remove Curse"] = 2782,
+		["Abolish Poison"] = 2893,
+		["Cure Poison"] = 8946,
+		["Revive"] = { 1237949, 50769 },
+		-- Paladin
+		["Flash of Light"] = 19750,
+		["Holy Light"] = { 635, 82326 },
+		["Word of Glory"] = 85673,
+		["Holy Shock"] = 20473,
+		["Cleanse"] = 4987,
+		["Cleanse Toxins"] = 213644,
+		["Purify (Paladin)"] = 1152,
+		["Blessing of Protection"] = 1022,
+		["Blessing of Freedom"] = 1044,
+		["Light's Vigil"] = 1310911,
+		["Lay on Hands"] = 633,
+		["Redemption"] = 7328,
+		-- Shaman
+		["Healing Surge"] = 8004,
+		["Lesser Healing Wave"] = 8004,
+		["Healing Wave"] = { 331, 77472 },
+		["Riptide"] = { 408521, 61295 },
+		["Chain Heal"] = 1064,
+		["Purify Spirit"] = 77130,
+		["Cleanse Spirit"] = 51886,
+		["Cure Poison (Shaman)"] = { 526, 8946 },
+		["Cure Disease (Shaman)"] = { 2870, 528 },
+		["Ancestral Spirit"] = 2008,
+		-- Monk
+		["Vivify"] = 116670,
+		["Renewing Mist"] = 115151,
+		["Enveloping Mist"] = 124682,
+		["Soothing Mist"] = 115175,
+		["Detox"] = { 115450, 218164 },
+		["Life Cocoon"] = 116849,
+		["Revival"] = 115310,
+		["Resuscitate"] = 115178,
+		-- Evoker
+		["Living Flame"] = 361469,
+		["Echo"] = 364343,
+		["Verdant Embrace"] = 360995,
+		["Spiritbloom"] = 367226,
+		["Emerald Blossom"] = 355916,
+		["Dream Breath"] = 355936,
+		["Naturalize"] = 360823,
+		["Expunge"] = 365585,
+		["Cauterizing Flame"] = 374251,
+		["Return"] = 361227,
+		-- Mage
+		["Remove Curse (Mage)"] = 475,
+	}
+
+	local CLASS_CLICKCAST_PRESETS = {
+		PRIEST = {
+			{ mod = "", button = "1", spells = { "Flash Heal", "Heal", "Lesser Heal" } },
+			{ mod = "", button = "2", spells = { "Renew", "Heal" } },
+			{ mod = "", button = "3", spells = { "Purify", "Dispel Magic", "Purify Disease" } },
+			{ mod = "shift-", button = "1", spells = { "Power Word: Shield" } },
+			{ mod = "shift-", button = "2", spells = { "Abolish Disease", "Cure Disease", "Purify Disease", "Dispel Magic" } },
+			{ mod = "shift-", button = "3", spells = { "Resurrection" } },
+			{ mod = "ctrl-", button = "1", spells = { "Penance", "Prayer of Mending", "Greater Heal", "Power Word: Radiance" } },
+		},
+		DRUID = {
+			{ mod = "", button = "1", spells = { "Regrowth", "Healing Touch" } },
+			{ mod = "", button = "2", spells = { "Rejuvenation" } },
+			{ mod = "", button = "3", spells = { "Nature's Cure", "Remove Corruption", "Remove Curse" } },
+			{ mod = "shift-", button = "1", spells = { "Swiftmend", "Lifebloom" } },
+			{ mod = "shift-", button = "2", spells = { "Abolish Poison", "Cure Poison", "Remove Corruption" } },
+			{ mod = "shift-", button = "3", spells = { "Revive" } },
+			{ mod = "ctrl-", button = "1", spells = { "Wild Growth" } },
+		},
+		PALADIN = {
+			{ mod = "", button = "1", spells = { "Flash of Light", "Holy Light" } },
+			{ mod = "", button = "2", spells = { "Holy Light", "Word of Glory" } },
+			{ mod = "", button = "3", spells = { "Cleanse", "Cleanse Toxins", "Purify (Paladin)" } },
+			{ mod = "shift-", button = "1", spells = { "Holy Shock", "Word of Glory" } },
+			{ mod = "shift-", button = "2", spells = { "Blessing of Protection" } },
+			{ mod = "shift-", button = "3", spells = { "Redemption" } },
+			{ mod = "ctrl-", button = "1", spells = { "Light's Vigil", "Blessing of Freedom", "Lay on Hands" } },
+		},
+		SHAMAN = {
+			{ mod = "", button = "1", spells = { "Healing Surge", "Lesser Healing Wave", "Healing Wave" } },
+			{ mod = "", button = "2", spells = { "Riptide", "Healing Wave" } },
+			{ mod = "", button = "3", spells = { "Purify Spirit", "Cleanse Spirit", "Cure Poison (Shaman)", "Cure Disease (Shaman)" } },
+			{ mod = "shift-", button = "1", spells = { "Chain Heal" } },
+			{ mod = "shift-", button = "2", spells = { "Cure Disease (Shaman)", "Cure Poison (Shaman)", "Cleanse Spirit" } },
+			{ mod = "shift-", button = "3", spells = { "Ancestral Spirit" } },
+			{ mod = "ctrl-", button = "1", spells = { "Riptide", "Chain Heal" } },
+		},
+		MONK = {
+			{ mod = "", button = "1", spells = { "Vivify" } },
+			{ mod = "", button = "2", spells = { "Renewing Mist" } },
+			{ mod = "", button = "3", spells = { "Detox" } },
+			{ mod = "shift-", button = "1", spells = { "Enveloping Mist", "Soothing Mist" } },
+			{ mod = "shift-", button = "3", spells = { "Resuscitate" } },
+			{ mod = "ctrl-", button = "1", spells = { "Life Cocoon", "Revival" } },
+		},
+		EVOKER = {
+			{ mod = "", button = "1", spells = { "Living Flame" } },
+			{ mod = "", button = "2", spells = { "Echo", "Verdant Embrace" } },
+			{ mod = "", button = "3", spells = { "Naturalize", "Expunge" } },
+			{ mod = "shift-", button = "1", spells = { "Verdant Embrace", "Spiritbloom" } },
+			{ mod = "shift-", button = "2", spells = { "Cauterizing Flame" } },
+			{ mod = "shift-", button = "3", spells = { "Return" } },
+			{ mod = "ctrl-", button = "1", spells = { "Emerald Blossom", "Dream Breath" } },
+		},
+		MAGE = {
+			{ mod = "", button = "3", spells = { "Remove Curse (Mage)" } },
+		},
+	}
+
+	local function GetSpellDisplayInfo(idOrName)
+		if C_Spell and C_Spell.GetSpellInfo then
+			return C_Spell.GetSpellInfo(idOrName)
+		elseif GetSpellInfo then
+			local name, _, icon, _, _, _, spellID = GetSpellInfo(idOrName)
+			if name then
+				return { name = name, iconID = icon, spellID = spellID }
+			end
+		end
+	end
+
+	local function IsSpellKnownInSpellbook(spellID, localizedName)
+		local byName = localizedName and GetSpellDisplayInfo(localizedName)
+		if byName and byName.name then
+			return byName.name
+		end
+		if C_SpellBook and C_SpellBook.IsSpellKnownOrInSpellBook and C_SpellBook.IsSpellKnownOrInSpellBook(spellID, 0, false) then
+			return localizedName
+		end
+		if C_SpellBook and C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(spellID) then
+			return localizedName
+		end
+		if IsSpellKnown and IsSpellKnown(spellID) then
+			return localizedName
+		end
+		return nil
+	end
+
+	local function ResolveSpellKey(spellKey)
+		local entry = CLICKCAST_SPELL_IDS[spellKey]
+		if not entry then return nil end
+		if type(entry) == "table" then
+			for _, spellID in ipairs(entry) do
+				local info = GetSpellDisplayInfo(spellID)
+				if info and info.name then
+					local known = IsSpellKnownInSpellbook(spellID, info.name)
+					if known then return known end
+				end
+			end
+		else
+			local info = GetSpellDisplayInfo(entry)
+			if info and info.name then
+				return IsSpellKnownInSpellbook(entry, info.name)
+			end
+		end
+		return nil
+	end
+
+	local clickCastFrames = {}
+	local pendingHeaderRegister = {}
+	local pendingClickCastUpdate = false
+
+	local function SetManagedAttr(frame, attrs, key, val)
+		if attrs[key] ~= val then
+			frame:SetAttribute(key, val)
+			attrs[key] = val
+		end
+	end
+
+	local function ClearManagedAttrs(frame)
+		local attrs = frame._brunClickCastAttrs
+		if not attrs then return end
+		for key in pairs(attrs) do
+			frame:SetAttribute(key, nil)
+		end
+		frame._brunClickCastAttrs = nil
+	end
+
+	local function ResolvePresetPlan()
+		if not enableClickCast then return nil end
+		local preset = CLASS_CLICKCAST_PRESETS[playerClass]
+		if not preset then return nil end
+		local plan = {}
+		local hasAny = false
+		for _, slot in ipairs(preset) do
+			local spellName
+			for _, key in ipairs(slot.spells) do
+				spellName = ResolveSpellKey(key)
+				if spellName then break end
+			end
+			if spellName then
+				hasAny = true
+				plan[slot.mod .. "type" .. slot.button] = "spell"
+				plan[slot.mod .. "spell" .. slot.button] = spellName
+			end
+		end
+		if not hasAny then return nil end
+		plan["alt-type1"] = "target"
+		plan["alt-type2"] = "togglemenu"
+		return plan
+	end
+
+	local function ApplyClickCastToFrame(frame, plan)
+		if not frame then return end
+		if InCombatLockdown() then
+			pendingClickCastUpdate = true
+			return
+		end
+		if pendingHeaderRegister[frame] then
+			if _G.ClickCastHeader and _G.ClickCastHeader.RegisterFrame then
+				pcall(_G.ClickCastHeader.RegisterFrame, _G.ClickCastHeader, frame)
+			end
+			pendingHeaderRegister[frame] = nil
+		end
+		if not enableClickCast or not plan then
+			ClearManagedAttrs(frame)
+			return
+		end
+		local attrs = frame._brunClickCastAttrs
+		if not attrs then
+			attrs = {}
+			frame._brunClickCastAttrs = attrs
+		end
+		for key in pairs(attrs) do
+			if plan[key] == nil then
+				frame:SetAttribute(key, nil)
+				attrs[key] = nil
+			end
+		end
+		for key, val in pairs(plan) do
+			SetManagedAttr(frame, attrs, key, val)
+		end
+	end
+
+	RegisterClickCastFrame = function(frame)
+		if not frame or clickCastFrames[frame] then return end
+		clickCastFrames[frame] = true
+		_G.ClickCastFrames = _G.ClickCastFrames or {}
+		if not _G.ClickCastFrames[frame] then
+			_G.ClickCastFrames[frame] = true
+		end
+		if InCombatLockdown() then
+			pendingHeaderRegister[frame] = true
+			pendingClickCastUpdate = true
+			return
+		end
+		if _G.ClickCastHeader and _G.ClickCastHeader.RegisterFrame then
+			pcall(_G.ClickCastHeader.RegisterFrame, _G.ClickCastHeader, frame)
+		end
+		ApplyClickCastToFrame(frame, ResolvePresetPlan())
+	end
+
+	UpdateAllClickCastFrames = function()
+		if InCombatLockdown() then
+			pendingClickCastUpdate = true
+			return
+		end
+		pendingClickCastUpdate = false
+		local plan = ResolvePresetPlan()
+		for frame in pairs(clickCastFrames) do
+			ApplyClickCastToFrame(frame, plan)
+		end
+	end
+
+	local ccWatcher = CreateFrame("Frame")
+	ccWatcher:RegisterEvent("PLAYER_LOGIN")
+	ccWatcher:RegisterEvent("SPELLS_CHANGED")
+	ccWatcher:RegisterEvent("PLAYER_TALENT_UPDATE")
+	ccWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+	ccWatcher:SetScript("OnEvent", function(_, event)
+		if event == "PLAYER_REGEN_ENABLED" and not pendingClickCastUpdate then return end
+		UpdateAllClickCastFrames()
+	end)
+end
+
+--===================================================--
 -- Saved Options, Edit Mode Movers & /brun Config GUI
 --===================================================--
 
@@ -856,6 +1187,8 @@ local DEFAULT_OPTIONS = {
 	enableThreatHighlight = enableThreatHighlight,
 	hideSelfInfo = hideSelfInfo,
 	hidePartyInRaid = hidePartyInRaid,
+	showRaidFrames = showRaidFrames,
+	enableClickCast = enableClickCast,
 	showBossFrames = showBossFrames,
 	showTargetTarget = showTargetTarget,
 	showTargetTargetTarget = showTargetTargetTarget,
@@ -913,6 +1246,8 @@ local function ApplySavedOptions()
 	enableThreatHighlight = opts.enableThreatHighlight
 	hideSelfInfo = opts.hideSelfInfo
 	hidePartyInRaid = opts.hidePartyInRaid
+	showRaidFrames = (opts.showRaidFrames ~= false)
+	enableClickCast = (opts.enableClickCast == true)
 	showBossFrames = opts.showBossFrames
 	showTargetTarget = (opts.showTargetTarget ~= false)
 	showTargetTargetTarget = (opts.showTargetTargetTarget ~= false)
@@ -949,6 +1284,13 @@ local function ApplySavedOptions()
 			TemporaryEnchantFrame:UnregisterAllEvents()
 			TemporaryEnchantFrame:Hide()
 		end
+	end
+
+	if UpdateAllClickCastFrames then
+		UpdateAllClickCastFrames()
+	end
+	if ns.UpdateBlizzardRaidFramesVisibility then
+		ns.UpdateBlizzardRaidFramesVisibility()
 	end
 end
 
@@ -1053,6 +1395,71 @@ local function CreatePositionAnchor(key, w, h, defaultPoint)
 	return anchor
 end
 
+local testModeActive = false
+local testBtnRef
+
+local function UpdateTestBtnText()
+	if testBtnRef then
+		testBtnRef:SetText(testModeActive and "Stop Test" or "Test Frames")
+	end
+end
+
+local function ToggleTestFrames(forceOff)
+	if InCombatLockdown() then return end
+
+	if forceOff then
+		if not testModeActive then return end
+		testModeActive = false
+	else
+		testModeActive = not testModeActive
+	end
+
+	local partyGroup = _G.oUF_BrunPartyGroup
+	if partyGroup then
+		if testModeActive then
+			UnregisterStateDriver(partyGroup, "visibility")
+			partyGroup:Show()
+		else
+			RegisterStateDriver(partyGroup, "visibility", hidePartyInRaid and "[group:raid] hide; [group:party] show; hide" or "[group:party] show; hide")
+		end
+	end
+
+	for i = 1, 4 do
+		local pf = _G["oUF_Party" .. i]
+		if pf then
+			if testModeActive then
+				UnregisterUnitWatch(pf)
+				pf:SetAttribute("unit", "player")
+				pf.__unit = "player"
+				pf:Show()
+				if pf.UpdateAllElements then pf:UpdateAllElements("ForceUpdate") end
+			else
+				local unit = "party" .. i
+				pf:SetAttribute("unit", unit)
+				pf.__unit = unit
+				RegisterUnitWatch(pf)
+				if pf.UpdateAllElements then pf:UpdateAllElements("ForceUpdate") end
+			end
+		end
+	end
+
+	if ns.ToggleRaidTestFrames then
+		ns.ToggleRaidTestFrames(testModeActive)
+	end
+
+	UpdateTestBtnText()
+end
+
+do
+	local testCombat = CreateFrame("Frame")
+	testCombat:RegisterEvent("PLAYER_REGEN_DISABLED")
+	testCombat:SetScript("OnEvent", function()
+		if testModeActive then
+			ToggleTestFrames(true)
+		end
+	end)
+end
+
 local configFrame
 local function ToggleConfigGUI()
 	if configFrame then
@@ -1108,6 +1515,8 @@ local function ToggleConfigGUI()
 			title = "Party, Raid & Encounters",
 			options = {
 				{ key = "hidePartyInRaid", label = "Hide Party Frames when in a Raid" },
+				{ key = "showRaidFrames", label = "Enable Raid Frames (8-Group Compact Grid)" },
+				{ key = "enableClickCast", label = "HealKit Click-Casting on Party & Raid (M1/M2 Heal, M3 Dispel)" },
 				{ key = "showBossFrames", label = "Enable Boss Frames (Boss 1-5)" },
 				{ key = "enableTotemBar", label = "Enable Clickable Totem Bar above Player" },
 				{ key = "hideCompactRaidManager", label = "Auto-fade Blizzard Raid Manager Tab" },
@@ -1180,7 +1589,7 @@ local function ToggleConfigGUI()
 	content:SetHeight(curY + 10)
 
 	local moverBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-	moverBtn:SetSize(120, 24)
+	moverBtn:SetSize(92, 24)
 	moverBtn:SetPoint("BOTTOMLEFT", 14, 12)
 	local function UpdateMoverBtnText()
 		moverBtn:SetText(manualMoversUnlocked and "Lock Movers" or "Unlock Movers")
@@ -1193,9 +1602,18 @@ local function ToggleConfigGUI()
 		UpdateMoverBtnText()
 	end)
 
+	local testBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+	testBtn:SetSize(92, 24)
+	testBtn:SetPoint("LEFT", moverBtn, "RIGHT", 8, 0)
+	testBtnRef = testBtn
+	UpdateTestBtnText()
+	testBtn:SetScript("OnClick", function()
+		ToggleTestFrames()
+	end)
+
 	local resetBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-	resetBtn:SetSize(110, 24)
-	resetBtn:SetPoint("BOTTOM", 0, 12)
+	resetBtn:SetSize(92, 24)
+	resetBtn:SetPoint("LEFT", testBtn, "RIGHT", 8, 0)
 	resetBtn:SetText("Reset Defaults")
 	resetBtn:SetScript("OnClick", function()
 		if InCombatLockdown() then return end
@@ -1213,7 +1631,7 @@ local function ToggleConfigGUI()
 	end)
 
 	local reloadBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-	reloadBtn:SetSize(110, 24)
+	reloadBtn:SetSize(92, 24)
 	reloadBtn:SetPoint("BOTTOMRIGHT", -14, 12)
 	reloadBtn:SetText("Reload UI")
 	reloadBtn:SetScript("OnClick", ReloadUI)
@@ -1224,6 +1642,7 @@ local function ToggleConfigGUI()
 			cb:SetChecked(curOpts[k])
 		end
 		UpdateMoverBtnText()
+		UpdateTestBtnText()
 	end)
 
 	configFrame = f
@@ -1344,6 +1763,8 @@ SlashCmdList["OUFBRUN"] = function(msg)
 		if InCombatLockdown() then return end
 		manualMoversUnlocked = not manualMoversUnlocked
 		UpdateEditModeMovers()
+	elseif msg == "test" then
+		ToggleTestFrames()
 	else
 		ToggleConfigGUI()
 	end
@@ -1906,6 +2327,7 @@ local UnitSpecific = {
 	end,
 
 	party = function(self)
+		RegisterClickCastFrame(self)
 		local hp = self.Health
 		if partyShowBuffs then
 			local buffs = CreateAuraWidget(self, "HELPFUL", partyWidth, partyBuffSize, partyBuffSpacing, "RIGHT", "UP")
@@ -2175,6 +2597,28 @@ local function Shared(self, unit, isSingle)
 	end
 end
 
+ns.FONT = FONT
+ns.TEXTURE = TEXTURE
+ns.HIGHLIGHT = HIGHLIGHT
+ns.RAID_FONT_SIZE = RAID_FONT_SIZE
+ns.raidWidth = raidWidth
+ns.raidHeight = raidHeight
+ns.defaultRaidPoint = oUF_Brun.Raid
+ns.smoothInterpolation = smoothInterpolation
+ns.ApplyBackdrop = ApplyBackdrop
+ns.PostUpdateBarColor = PostUpdateBarColor
+ns.PostUpdateThreat = PostUpdateThreat
+ns.UnitFrameOnEnter = UnitFrameOnEnter
+ns.UnitFrameOnLeave = UnitFrameOnLeave
+ns.CreateHealthPrediction = CreateHealthPrediction
+ns.CreateAuraWidget = CreateAuraWidget
+ns.CreatePositionAnchor = CreatePositionAnchor
+ns.RegisterClickCastFrame = RegisterClickCastFrame
+ns.IsRaidFramesEnabled = function() return showRaidFrames end
+ns.IsHealthPredictionEnabled = function() return enableHealthPrediction end
+ns.IsThreatHighlightEnabled = function() return enableThreatHighlight end
+ns.IsDispelHighlightEnabled = function() return highlightDispellableDebuffs end
+
 oUF:RegisterStyle("Brun", Shared)
 
 local function SpawnFrames(self)
@@ -2272,6 +2716,10 @@ local function SpawnFrames(self)
 	end
 
 	RegisterStateDriver(partyGroup, "visibility", hidePartyInRaid and "[group:raid] hide; [group:party] show; hide" or "[group:party] show; hide")
+
+	if ns.SpawnRaidFrames then
+		ns.SpawnRaidFrames(self)
+	end
 end
 
 oUF:Factory(SpawnFrames)

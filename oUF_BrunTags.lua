@@ -1,3 +1,8 @@
+--[[-------------------------------------------------------------------------
+  Copyright (c) Lasse G. Brun. All rights reserved.
+  Licensed under the MIT License. See LICENSE in the project root.
+---------------------------------------------------------------------------]]
+
 local _, ns = ...
 local oUF = ns.oUF or _G.oUF
 assert(oUF, "oUF_Brun requires oUF to be loaded.")
@@ -171,6 +176,39 @@ end)
 
 RegisterTag("NormalName", "UNIT_NAME_UPDATE GROUP_ROSTER_UPDATE UNIT_CONNECTION PARTY_MEMBER_ENABLE PARTY_MEMBER_DISABLE", function(u, r)
 	return GetFormattedUnitName(u, r, 27, true)
+end)
+
+RegisterTag("brunraid_name", "UNIT_NAME_UPDATE GROUP_ROSTER_UPDATE UNIT_CONNECTION PARTY_MEMBER_ENABLE PARTY_MEMBER_DISABLE", function(u, r)
+	local name = GetFormattedUnitName(u, r, 6, false)
+	if type(name) == "string" and not issecretvalue(name) then
+		local first = name:match("^(%S+)")
+		if first then name = first end
+	end
+	return utf8sub(name, 4, false)
+end)
+
+RegisterTag("brunraid_status", "UNIT_HEALTH UNIT_MAXHEALTH UNIT_CONNECTION PLAYER_FLAGS_CHANGED", function(u)
+	local connected = UnitIsConnected(u)
+	if not issecretvalue(connected) and not connected then
+		return "Offl"
+	end
+	local dead = UnitIsDead(u)
+	if not issecretvalue(dead) and dead then
+		return "Dead"
+	end
+	local ghost = UnitIsGhost(u)
+	if not issecretvalue(ghost) and ghost then
+		return "Ghst"
+	end
+	local m, n = UnitHealthMax(u), UnitHealth(u)
+	if not m then return end
+	if issecretvalue(m) or issecretvalue(n) then
+		if UnitHealthPercent and CurveConstants and CurveConstants.ScaleTo100 then
+			return string.format("%d%%", UnitHealthPercent(u, true, CurveConstants.ScaleTo100))
+		end
+		return siValue(n)
+	end
+	return m == 0 and "0%" or string.format("%d%%", math.floor(n / m * 100))
 end)
 
 RegisterTag("afkdnd", "PLAYER_FLAGS_CHANGED", function(u)
