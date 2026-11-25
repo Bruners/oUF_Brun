@@ -11,3 +11,4 @@
 oUF_BrunTags.lua
 oUF_Brun.lua
 oUF_BrunRaid.lua
+oUF_BrunOptions.lua

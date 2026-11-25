@@ -51,6 +51,8 @@ local highlightExpiringAuras = true		-- Highlight aura timer numbers in yellow/r
 local highlightDispellableDebuffs = true	-- Highlight and prioritize debuffs the player's class can dispel.
 local showRaidFrames = true				-- Spawn 8-group compact raid grid inside raid groups.
 local enableClickCast = false			-- Enable HealKit-style click-casting (M1/M2 heal, M3 dispel) on Party & Raid frames.
+local showPortraits = false				-- Show portrait frames beside Player and Target.
+local use2DPortraits = false			-- Use 2D portrait textures instead of 3D models when portraits are enabled.
 
 ns.firstNameOnly = firstNameOnly
 ns.shortRaceNames = shortRaceNames
@@ -761,16 +763,23 @@ do
 	local FADE_IN_TIME = 0.3
 	local FADE_OUT_TIME = 1.2
 
+	local function SetFrameAlpha(frame, alpha)
+		frame:SetAlpha(alpha)
+		if frame.Portrait and frame.Portrait.SetModelAlpha then
+			frame.Portrait:SetModelAlpha(alpha)
+		end
+	end
+
 	local function FadeOnUpdate(self, elapsed)
 		local count = 0
 		for frame, info in pairs(fadeFrames) do
 			info.timer = info.timer + elapsed
 			if info.timer >= info.duration then
-				frame:SetAlpha(info.endAlpha)
+				SetFrameAlpha(frame, info.endAlpha)
 				fadeFrames[frame] = nil
 			else
 				local progress = info.timer / info.duration
-				frame:SetAlpha(info.startAlpha + (info.endAlpha - info.startAlpha) * progress)
+				SetFrameAlpha(frame, info.startAlpha + (info.endAlpha - info.startAlpha) * progress)
 				count = count + 1
 			end
 		end
@@ -797,7 +806,7 @@ do
 	end
 
 	local function ShouldFrameShow(self)
-		if self:IsMouseOver() then return true end
+		if self:IsMouseOver() or (self.PortraitHolder and self.PortraitHolder:IsMouseOver()) then return true end
 		if UnitAffectingCombat("player") then return true end
 		if UnitExists("target") then return true end
 		if C_Secrets and C_Secrets.ShouldUnitSpellCastingBeSecret and C_Secrets.ShouldUnitSpellCastingBeSecret("player") then
@@ -853,7 +862,7 @@ do
 	end, function(self)
 		activeFrames[self] = nil
 		fadeFrames[self] = nil
-		self:SetAlpha(1)
+		SetFrameAlpha(self, 1)
 		if not next(activeFrames) and fadeManager.registered then
 			fadeManager:UnregisterAllEvents()
 			fadeManager:SetScript("OnEvent", nil)
@@ -1190,6 +1199,8 @@ local DEFAULT_OPTIONS = {
 	hidePartyInRaid = hidePartyInRaid,
 	showRaidFrames = showRaidFrames,
 	enableClickCast = enableClickCast,
+	showPortraits = showPortraits,
+	use2DPortraits = use2DPortraits,
 	showBossFrames = showBossFrames,
 	showTargetTarget = showTargetTarget,
 	showTargetTargetTarget = showTargetTargetTarget,
@@ -1249,6 +1260,8 @@ local function ApplySavedOptions()
 	hidePartyInRaid = opts.hidePartyInRaid
 	showRaidFrames = (opts.showRaidFrames ~= false)
 	enableClickCast = (opts.enableClickCast == true)
+	showPortraits = (opts.showPortraits == true)
+	use2DPortraits = (opts.use2DPortraits == true)
 	showBossFrames = opts.showBossFrames
 	showTargetTarget = (opts.showTargetTarget ~= false)
 	showTargetTargetTarget = (opts.showTargetTargetTarget ~= false)
@@ -1318,6 +1331,9 @@ local function UpdateEditModeMovers()
 	for _, mover in pairs(movers) do
 		FinishMoverDrag(mover)
 		mover:SetShown(editing)
+	end
+	if ns.UpdateMoverBtnState then
+		ns.UpdateMoverBtnState()
 	end
 end
 
@@ -1397,13 +1413,6 @@ local function CreatePositionAnchor(key, w, h, defaultPoint)
 end
 
 local testModeActive = false
-local testBtnRef
-
-local function UpdateTestBtnText()
-	if testBtnRef then
-		testBtnRef:SetText(testModeActive and "Stop Test" or "Test Frames")
-	end
-end
 
 local function ToggleTestFrames(forceOff)
 	if InCombatLockdown() then return end
@@ -1448,7 +1457,9 @@ local function ToggleTestFrames(forceOff)
 		ns.ToggleRaidTestFrames(testModeActive)
 	end
 
-	UpdateTestBtnText()
+	if ns.UpdateTestBtnState then
+		ns.UpdateTestBtnState()
+	end
 end
 
 do
@@ -1468,8 +1479,36 @@ local function ToggleConfigGUI()
 		return
 	end
 
+	local LIVE_OPTIONS = {
+		firstNameOnly = true,
+		shortRaceNames = true,
+		showMinimapIcon = true,
+		enableClickCast = true,
+		desaturateOtherDebuffs = true,
+		highlightExpiringAuras = true,
+		highlightDispellableDebuffs = true,
+	}
+
+	local FLAT_BACKDROP = {
+		bgFile = "Interface\\Buttons\\WHITE8X8",
+		edgeFile = "Interface\\Buttons\\WHITE8X8",
+		edgeSize = 1,
+	}
+
+	local function StyleFlatBox(frame, bgR, bgG, bgB, bgA, brR, brG, brB, brA)
+		if not frame.SetBackdrop and BackdropTemplateMixin then
+			Mixin(frame, BackdropTemplateMixin)
+			if frame.OnBackdropLoaded then frame:OnBackdropLoaded() end
+		end
+		if frame.SetBackdrop then
+			frame:SetBackdrop(FLAT_BACKDROP)
+			frame:SetBackdropColor(bgR, bgG, bgB, bgA)
+			frame:SetBackdropBorderColor(brR, brG, brB, brA)
+		end
+	end
+
 	local f = CreateFrame("Frame", "oUF_BrunConfigFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-	f:SetSize(420, 560)
+	f:SetSize(580, 444)
 	f:SetPoint("CENTER")
 	f:SetFrameStrata("DIALOG")
 	f:SetMovable(true)
@@ -1478,145 +1517,667 @@ local function ToggleConfigGUI()
 	f:RegisterForDrag("LeftButton")
 	f:SetScript("OnDragStart", f.StartMoving)
 	f:SetScript("OnDragStop", f.StopMovingOrSizing)
-	ApplyBackdrop(f)
+	StyleFlatBox(f, 0.06, 0.06, 0.08, 0.96, 0.22, 0.22, 0.26, 1)
 	tinsert(UISpecialFrames, "oUF_BrunConfigFrame")
 
-	local title = f:CreateFontString(nil, "OVERLAY")
+	-- Header bar
+	local headerBar = CreateFrame("Frame", nil, f)
+	headerBar:SetPoint("TOPLEFT", 1, -1)
+	headerBar:SetPoint("TOPRIGHT", -1, -1)
+	headerBar:SetHeight(40)
+
+	local headerBg = headerBar:CreateTexture(nil, "BACKGROUND")
+	headerBg:SetAllPoints()
+	headerBg:SetColorTexture(0.09, 0.09, 0.12, 1)
+
+	local headerAccent = headerBar:CreateTexture(nil, "ARTWORK")
+	headerAccent:SetPoint("TOPLEFT", 0, 0)
+	headerAccent:SetPoint("TOPRIGHT", 0, 0)
+	headerAccent:SetHeight(2)
+	headerAccent:SetColorTexture(1, 0.5, 0, 0.9)
+
+	local headerLine = f:CreateTexture(nil, "BORDER")
+	headerLine:SetPoint("TOPLEFT", headerBar, "BOTTOMLEFT", 0, 0)
+	headerLine:SetPoint("TOPRIGHT", headerBar, "BOTTOMRIGHT", 0, 0)
+	headerLine:SetHeight(1)
+	headerLine:SetColorTexture(1, 1, 1, 0.08)
+
+	local title = headerBar:CreateFontString(nil, "OVERLAY")
 	title:SetFont(FONT, FONT_SIZE + 2, "OUTLINE")
-	title:SetPoint("TOPLEFT", 16, -12)
-	title:SetText("|cffff8000oUF_Brun|r Quick Settings")
+	title:SetPoint("LEFT", 16, 0)
+	title:SetText("|cffff8000oUF_Brun|r  |cffe6e6e6Settings|r")
 
-	local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-	closeBtn:SetPoint("TOPRIGHT", -2, -2)
+	local version = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version"))
+		or (GetAddOnMetadata and GetAddOnMetadata(addonName, "Version"))
+	if version and version ~= "" then
+		local verText = headerBar:CreateFontString(nil, "OVERLAY")
+		verText:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+		verText:SetPoint("LEFT", title, "RIGHT", 8, -1)
+		verText:SetTextColor(0.55, 0.55, 0.6)
+		verText:SetText("v" .. version)
+	end
 
-	local scrollFrame = CreateFrame("ScrollFrame", "oUF_BrunConfigScrollFrame", f, "UIPanelScrollFrameTemplate")
-	scrollFrame:SetPoint("TOPLEFT", 14, -38)
-	scrollFrame:SetPoint("BOTTOMRIGHT", -32, 46)
+	local closeBtn = CreateFrame("Button", nil, headerBar, BackdropTemplateMixin and "BackdropTemplate" or nil)
+	closeBtn:SetSize(24, 24)
+	closeBtn:SetPoint("RIGHT", -10, 0)
+	StyleFlatBox(closeBtn, 0.14, 0.14, 0.17, 1, 0.25, 0.25, 0.3, 1)
+	local closeTxt = closeBtn:CreateFontString(nil, "OVERLAY")
+	closeTxt:SetFont(FONT, FONT_SIZE, "OUTLINE")
+	closeTxt:SetPoint("CENTER", 0, 0)
+	closeTxt:SetText("X")
+	closeTxt:SetTextColor(0.8, 0.8, 0.85)
+	closeBtn:SetScript("OnEnter", function(self)
+		self:SetBackdropColor(0.65, 0.16, 0.16, 1)
+		self:SetBackdropBorderColor(0.9, 0.3, 0.3, 1)
+		closeTxt:SetTextColor(1, 1, 1)
+	end)
+	closeBtn:SetScript("OnLeave", function(self)
+		self:SetBackdropColor(0.14, 0.14, 0.17, 1)
+		self:SetBackdropBorderColor(0.25, 0.25, 0.3, 1)
+		closeTxt:SetTextColor(0.8, 0.8, 0.85)
+	end)
+	closeBtn:SetScript("OnClick", function() f:Hide() end)
 
-	local content = CreateFrame("Frame", nil, scrollFrame)
-	content:SetSize(360, 780)
-	scrollFrame:SetScrollChild(content)
+	-- Footer bar
+	local footerBar = CreateFrame("Frame", nil, f)
+	footerBar:SetPoint("BOTTOMLEFT", 1, 1)
+	footerBar:SetPoint("BOTTOMRIGHT", -1, 1)
+	footerBar:SetHeight(48)
 
-	local optionSections = {
-		{
-			title = "General Settings",
-			options = {
-				{ key = "enableFader", label = "Fade Player & Pet out of combat" },
-				{ key = "firstNameOnly", label = "First Name Only (hide Forever surnames)" },
-				{ key = "shortRaceNames", label = "Shorten Long Race & Creature Names" },
-				{ key = "enableHealthPrediction", label = "Incoming Heal & Absorb Shields" },
-				{ key = "enableThreatHighlight", label = "Aggro / Threat Backdrop Highlight" },
-				{ key = "hideSelfInfo", label = "Hide Player Name & Level at Max Level" },
-				{ key = "showTargetTarget", label = "Show Target of Target (ToT)" },
-				{ key = "showTargetTargetTarget", label = "Show Target of Target's Target (ToToT)" },
-				{ key = "showMinimapIcon", label = "Show Minimap Quick Toggle Icon" },
-			},
-		},
-		{
-			title = "Party, Raid & Encounters",
-			options = {
-				{ key = "hidePartyInRaid", label = "Hide Party Frames when in a Raid" },
-				{ key = "showRaidFrames", label = "Enable Raid Frames (8-Group Compact Grid)" },
-				{ key = "enableClickCast", label = "HealKit Click-Casting on Party & Raid (M1/M2 Heal, M3 Dispel)" },
-				{ key = "showBossFrames", label = "Enable Boss Frames (Boss 1-5)" },
-				{ key = "enableTotemBar", label = "Enable Clickable Totem Bar above Player" },
-				{ key = "hideCompactRaidManager", label = "Auto-fade Blizzard Raid Manager Tab" },
-				{ key = "oUFRuneBar", label = "Use oUF Death Knight Rune Bar" },
-				{ key = "enableClassPower", label = "Show Player Class Power / Stagger Bar" },
-				{ key = "removeBuffs", label = "Hide Default Blizzard Buff Frame" },
-			},
-		},
-		{
-			title = "Castbars & Auras",
-			options = {
-				{ key = "desaturateOtherDebuffs", label = "Prioritize Player Debuffs & desaturate others" },
-				{ key = "highlightDispellableDebuffs", label = "Highlight Dispellable Debuffs (Player Class)" },
-				{ key = "playerCastBar", label = "Show Player Castbar" },
-				{ key = "enableSwingBar", label = "Show Player Swing Timer Bar" },
-				{ key = "targetCastBar", label = "Show Target Castbar" },
-				{ key = "focusCastBar", label = "Show Focus Castbar" },
-				{ key = "playerShowBuffs", label = "Show Player Buffs" },
-				{ key = "playerShowDebuffs", label = "Show Player Debuffs" },
-				{ key = "targetShowBuffs", label = "Show Target Buffs" },
-				{ key = "targetShowDebuffs", label = "Show Target Debuffs" },
-				{ key = "focusShowBuffs", label = "Show Focus Buffs" },
-				{ key = "focusShowDebuffs", label = "Show Focus Debuffs" },
-				{ key = "partyShowBuffs", label = "Show Party Buffs" },
-				{ key = "partyShowDebuffs", label = "Show Party Debuffs" },
-				{ key = "highlightExpiringAuras", label = "Highlight aura timer when expiring (<=10s / <=5s)" },
-			},
-		},
-	}
+	local footerBg = footerBar:CreateTexture(nil, "BACKGROUND")
+	footerBg:SetAllPoints()
+	footerBg:SetColorTexture(0.08, 0.08, 0.10, 1)
 
+	local footerLine = f:CreateTexture(nil, "BORDER")
+	footerLine:SetPoint("BOTTOMLEFT", footerBar, "TOPLEFT", 0, 0)
+	footerLine:SetPoint("BOTTOMRIGHT", footerBar, "TOPRIGHT", 0, 0)
+	footerLine:SetHeight(1)
+	footerLine:SetColorTexture(1, 1, 1, 0.08)
+
+	-- Left navigation sidebar
+	local sidebar = CreateFrame("Frame", nil, f)
+	sidebar:SetPoint("TOPLEFT", headerBar, "BOTTOMLEFT", 0, -1)
+	sidebar:SetPoint("BOTTOMLEFT", footerBar, "TOPLEFT", 0, 1)
+	sidebar:SetWidth(138)
+
+	local sidebarBg = sidebar:CreateTexture(nil, "BACKGROUND")
+	sidebarBg:SetAllPoints()
+	sidebarBg:SetColorTexture(0.045, 0.045, 0.06, 0.95)
+
+	local sidebarLine = f:CreateTexture(nil, "BORDER")
+	sidebarLine:SetPoint("TOPLEFT", sidebar, "TOPRIGHT", 0, 0)
+	sidebarLine:SetPoint("BOTTOMLEFT", sidebar, "BOTTOMRIGHT", 0, 0)
+	sidebarLine:SetWidth(1)
+	sidebarLine:SetColorTexture(1, 1, 1, 0.08)
+
+	local statusHint = sidebar:CreateFontString(nil, "OVERLAY")
+	statusHint:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+	statusHint:SetPoint("BOTTOMLEFT", 12, 12)
+	statusHint:SetPoint("BOTTOMRIGHT", -10, 12)
+	statusHint:SetJustifyH("LEFT")
+	statusHint:SetTextColor(0.5, 0.5, 0.56)
+	statusHint:SetText("Live options apply\ninstantly.")
+
+	-- Right content host
+	local contentArea = CreateFrame("Frame", nil, f)
+	contentArea:SetPoint("TOPLEFT", sidebar, "TOPRIGHT", 1, 0)
+	contentArea:SetPoint("BOTTOMRIGHT", footerBar, "TOPRIGHT", 0, 1)
+
+	-- Shared state & helpers
 	local checkboxes = {}
-	local opts = GetOptionsDB()
-	local curY = 0
+	local dependentControls = {}
+	local reloadNeeded = false
+	local reloadBtn
 
-	for _, section in ipairs(optionSections) do
-		local header = content:CreateFontString(nil, "OVERLAY")
-		header:SetFont(FONT, SMALL_FONT_SIZE + 1, "OUTLINE")
-		header:SetTextColor(1, 0.82, 0)
-		header:SetPoint("TOPLEFT", 6, -curY)
-		header:SetText(section.title)
-		curY = curY + 20
-
-		for _, def in ipairs(section.options) do
-			local cb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
-			cb:SetSize(22, 22)
-			cb:SetPoint("TOPLEFT", 10, -curY)
-			cb:SetChecked(opts[def.key])
-
-			local text = cb.Text or cb:CreateFontString(nil, "OVERLAY")
-			text:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
-			text:SetPoint("LEFT", cb, "RIGHT", 4, 0)
-			text:SetTextColor(1, 1, 1)
-			text:SetText(def.label)
-
-			cb:SetScript("OnClick", function(self)
-				local checked = self:GetChecked() and true or false
-				GetOptionsDB()[def.key] = checked
-				ApplySavedOptions()
-				if def.key == "firstNameOnly" or def.key == "shortRaceNames" then
-					for _, obj in ipairs(oUF.objects) do
-						if obj.UpdateTags then obj:UpdateTags() end
-					end
-				end
-			end)
-			checkboxes[def.key] = cb
-			curY = curY + 24
+	local function UpdateReloadHint()
+		if reloadNeeded then
+			statusHint:SetTextColor(1, 0.62, 0.2)
+			statusHint:SetText("Reload UI to apply\nstructural changes.")
+		else
+			statusHint:SetTextColor(0.5, 0.5, 0.56)
+			statusHint:SetText("Live options apply\ninstantly.")
 		end
-		curY = curY + 8
+		if reloadBtn and reloadBtn.SetAccent then
+			reloadBtn:SetAccent(reloadNeeded)
+		end
 	end
-	content:SetHeight(curY + 10)
 
-	local moverBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-	moverBtn:SetSize(92, 24)
-	moverBtn:SetPoint("BOTTOMLEFT", 14, 12)
-	local function UpdateMoverBtnText()
-		moverBtn:SetText(manualMoversUnlocked and "Lock Movers" or "Unlock Movers")
+	local function RefreshDependencies()
+		local curOpts = GetOptionsDB()
+		for _, item in ipairs(dependentControls) do
+			local enabled = curOpts[item.dependsOn] and true or false
+			item.setEnabled(enabled)
+		end
 	end
-	UpdateMoverBtnText()
-	moverBtn:SetScript("OnClick", function()
+
+	local function OnOptionChanged(key, checked)
+		GetOptionsDB()[key] = checked
+		ApplySavedOptions()
+		if key == "firstNameOnly" or key == "shortRaceNames" then
+			for _, obj in ipairs(oUF.objects) do
+				if obj.UpdateTags then obj:UpdateTags() end
+			end
+		end
+		if not LIVE_OPTIONS[key] then
+			reloadNeeded = true
+			UpdateReloadHint()
+		end
+		RefreshDependencies()
+	end
+
+	local function CreateActionButton(parent, label, btnW, btnH, onClick)
+		local btn = CreateFrame("Button", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+		btn:SetSize(btnW, btnH)
+		StyleFlatBox(btn, 0.13, 0.13, 0.16, 1, 0.28, 0.28, 0.34, 1)
+
+		local txt = btn:CreateFontString(nil, "OVERLAY")
+		txt:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		txt:SetPoint("CENTER", 0, 0)
+		txt:SetText(label)
+		txt:SetTextColor(0.92, 0.92, 0.95)
+		btn.label = txt
+		btn._active = false
+		btn._accent = false
+		btn._hovered = false
+
+		local function RefreshStyle()
+			if btn._active or btn._accent then
+				if btn._hovered then
+					btn:SetBackdropColor(0.75, 0.38, 0.05, 1)
+				else
+					btn:SetBackdropColor(0.58, 0.28, 0.04, 0.95)
+				end
+				btn:SetBackdropBorderColor(1, 0.56, 0.12, 1)
+				txt:SetTextColor(1, 1, 1)
+			elseif btn._hovered then
+				btn:SetBackdropColor(0.20, 0.20, 0.25, 1)
+				btn:SetBackdropBorderColor(0.48, 0.48, 0.56, 1)
+				txt:SetTextColor(1, 1, 1)
+			else
+				btn:SetBackdropColor(0.13, 0.13, 0.16, 1)
+				btn:SetBackdropBorderColor(0.28, 0.28, 0.34, 1)
+				txt:SetTextColor(0.92, 0.92, 0.95)
+			end
+		end
+
+		function btn:SetLabel(text)
+			txt:SetText(text)
+		end
+		function btn:SetActive(state)
+			btn._active = state and true or false
+			RefreshStyle()
+		end
+		function btn:SetAccent(state)
+			btn._accent = state and true or false
+			RefreshStyle()
+		end
+
+		btn:SetScript("OnEnter", function()
+			btn._hovered = true
+			RefreshStyle()
+		end)
+		btn:SetScript("OnLeave", function()
+			btn._hovered = false
+			RefreshStyle()
+		end)
+		btn:SetScript("OnClick", onClick)
+		return btn
+	end
+
+	local function CreateCard(parent, cardTitle, cardHeight, yOffset)
+		local card = CreateFrame("Frame", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+		card:SetPoint("TOPLEFT", 14, -yOffset)
+		card:SetPoint("TOPRIGHT", -14, -yOffset)
+		card:SetHeight(cardHeight)
+		StyleFlatBox(card, 0.09, 0.09, 0.12, 0.9, 1, 1, 1, 0.07)
+
+		local hdr = card:CreateFontString(nil, "OVERLAY")
+		hdr:SetFont(FONT, SMALL_FONT_SIZE + 1, "OUTLINE")
+		hdr:SetPoint("TOPLEFT", 12, -10)
+		hdr:SetTextColor(1, 0.72, 0.18)
+		hdr:SetText(cardTitle)
+
+		local line = card:CreateTexture(nil, "BORDER")
+		line:SetPoint("TOPLEFT", 12, -26)
+		line:SetPoint("TOPRIGHT", -12, -26)
+		line:SetHeight(1)
+		line:SetColorTexture(1, 1, 1, 0.06)
+
+		return card
+	end
+
+	local function CreateCheckVisual(parent)
+		local box = CreateFrame("Frame", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+		box:SetSize(15, 15)
+		StyleFlatBox(box, 0.05, 0.05, 0.07, 1, 0.34, 0.34, 0.40, 1)
+
+		local fill = box:CreateTexture(nil, "ARTWORK")
+		fill:SetPoint("TOPLEFT", 3, -3)
+		fill:SetPoint("BOTTOMRIGHT", -3, 3)
+		fill:SetTexture(TEXTURE)
+		fill:SetVertexColor(1, 0.55, 0.08, 1)
+		box.fill = fill
+
+		function box:SetCheckedVisual(checked, enabled)
+			fill:SetShown(checked)
+			if not enabled then
+				box:SetBackdropBorderColor(0.24, 0.24, 0.28, 0.6)
+				fill:SetVertexColor(0.55, 0.42, 0.25, 0.55)
+			elseif checked then
+				box:SetBackdropBorderColor(1, 0.56, 0.12, 1)
+				fill:SetVertexColor(1, 0.55, 0.08, 1)
+			else
+				box:SetBackdropBorderColor(0.36, 0.36, 0.42, 1)
+			end
+		end
+
+		return box
+	end
+
+	local function CreateToggleRow(card, def, rowIndex)
+		local opts = GetOptionsDB()
+		local y = 32 + (rowIndex - 1) * 24
+		local indent = def.indent and 18 or 0
+
+		local row = CreateFrame("Button", nil, card)
+		row:SetPoint("TOPLEFT", 8 + indent, -y)
+		row:SetPoint("TOPRIGHT", -8, -y)
+		row:SetHeight(22)
+
+		local hoverBg = row:CreateTexture(nil, "BACKGROUND")
+		hoverBg:SetAllPoints()
+		hoverBg:SetColorTexture(1, 1, 1, 0.045)
+		hoverBg:Hide()
+
+		local box = CreateCheckVisual(row)
+		box:SetPoint("LEFT", 6, 0)
+
+		local label = row:CreateFontString(nil, "OVERLAY")
+		label:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		label:SetPoint("LEFT", box, "RIGHT", 8, 0)
+		label:SetJustifyH("LEFT")
+		label:SetText(def.label)
+		label:SetTextColor(0.92, 0.92, 0.95)
+
+		if LIVE_OPTIONS[def.key] then
+			local liveTag = row:CreateFontString(nil, "OVERLAY")
+			liveTag:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+			liveTag:SetPoint("RIGHT", -6, 0)
+			liveTag:SetTextColor(0.35, 0.78, 0.45)
+			liveTag:SetText("LIVE")
+			row.liveTag = liveTag
+			label:SetPoint("RIGHT", liveTag, "LEFT", -8, 0)
+		else
+			label:SetPoint("RIGHT", -8, 0)
+		end
+
+		local isChecked = opts[def.key] and true or false
+		local isEnabled = true
+
+		local function Refresh()
+			box:SetCheckedVisual(isChecked, isEnabled)
+			if isEnabled then
+				label:SetTextColor(0.92, 0.92, 0.95)
+			else
+				label:SetTextColor(0.45, 0.45, 0.50)
+			end
+			if row.liveTag then
+				row.liveTag:SetAlpha(isEnabled and 1 or 0.35)
+			end
+		end
+
+		local control = {
+			SetChecked = function(_, val)
+				isChecked = val and true or false
+				Refresh()
+			end,
+		}
+		checkboxes[def.key] = control
+
+		if def.dependsOn then
+			table.insert(dependentControls, {
+				dependsOn = def.dependsOn,
+				setEnabled = function(enabled)
+					isEnabled = enabled
+					Refresh()
+				end,
+			})
+		end
+
+		row:SetScript("OnEnter", function(self)
+			if isEnabled then hoverBg:Show() end
+			if def.tip or (not isEnabled and def.dependsLabel) then
+				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+				GameTooltip:AddLine(def.label, 1, 0.82, 0)
+				if def.tip then
+					GameTooltip:AddLine(def.tip, 0.85, 0.85, 0.9, true)
+				end
+				if not isEnabled and def.dependsLabel then
+					GameTooltip:AddLine("Requires '" .. def.dependsLabel .. "' to be enabled.", 1, 0.45, 0.35, true)
+				elseif LIVE_OPTIONS[def.key] then
+					GameTooltip:AddLine("Applies immediately without reloading.", 0.35, 0.85, 0.45)
+				else
+					GameTooltip:AddLine("Requires Reload UI to apply.", 0.65, 0.65, 0.7)
+				end
+				GameTooltip:Show()
+			end
+		end)
+		row:SetScript("OnLeave", function()
+			hoverBg:Hide()
+			GameTooltip:Hide()
+		end)
+		row:SetScript("OnClick", function()
+			if not isEnabled then return end
+			isChecked = not isChecked
+			Refresh()
+			OnOptionChanged(def.key, isChecked)
+		end)
+
+		Refresh()
+		return row
+	end
+
+	local function CreateMatrixCell(parent, key, tipLabel, xCenter, yTop)
+		local opts = GetOptionsDB()
+		local btn = CreateFrame("Button", nil, parent)
+		btn:SetSize(28, 22)
+		btn:SetPoint("TOP", parent, "TOPLEFT", xCenter, -yTop)
+
+		local hoverBg = btn:CreateTexture(nil, "BACKGROUND")
+		hoverBg:SetAllPoints()
+		hoverBg:SetColorTexture(1, 1, 1, 0.06)
+		hoverBg:Hide()
+
+		local box = CreateCheckVisual(btn)
+		box:SetPoint("CENTER")
+
+		local isChecked = opts[key] and true or false
+		local function Refresh()
+			box:SetCheckedVisual(isChecked, true)
+		end
+
+		checkboxes[key] = {
+			SetChecked = function(_, val)
+				isChecked = val and true or false
+				Refresh()
+			end,
+		}
+
+		btn:SetScript("OnEnter", function(self)
+			hoverBg:Show()
+			GameTooltip:SetOwner(self, "ANCHOR_TOP")
+			GameTooltip:AddLine(tipLabel, 1, 0.82, 0)
+			GameTooltip:AddLine("Requires Reload UI to apply.", 0.65, 0.65, 0.7)
+			GameTooltip:Show()
+		end)
+		btn:SetScript("OnLeave", function()
+			hoverBg:Hide()
+			GameTooltip:Hide()
+		end)
+		btn:SetScript("OnClick", function()
+			isChecked = not isChecked
+			Refresh()
+			OnOptionChanged(key, isChecked)
+		end)
+
+		Refresh()
+		return btn
+	end
+
+	-- Build 4 category pages
+	local tabs = {
+		{ id = "general", label = "General" },
+		{ id = "frames", label = "Unit Frames" },
+		{ id = "auras", label = "Auras & Casts" },
+		{ id = "group", label = "Party & Raid" },
+	}
+	local pages = {}
+	local tabButtons = {}
+
+	local function SelectTab(tabId)
+		for id, page in pairs(pages) do
+			page:SetShown(id == tabId)
+		end
+		for id, btn in pairs(tabButtons) do
+			local active = (id == tabId)
+			btn._active = active
+			btn.accent:SetShown(active)
+			if active then
+				btn.bg:SetColorTexture(1, 0.5, 0, 0.14)
+				btn.label:SetTextColor(1, 0.84, 0.45)
+			else
+				btn.bg:SetColorTexture(0, 0, 0, 0)
+				btn.label:SetTextColor(0.76, 0.76, 0.82)
+			end
+		end
+	end
+
+	for i, tab in ipairs(tabs) do
+		local page = CreateFrame("Frame", nil, contentArea)
+		page:SetAllPoints()
+		page:Hide()
+		pages[tab.id] = page
+
+		local tbtn = CreateFrame("Button", nil, sidebar)
+		tbtn:SetPoint("TOPLEFT", 6, -(12 + (i - 1) * 34))
+		tbtn:SetPoint("TOPRIGHT", -6, -(12 + (i - 1) * 34))
+		tbtn:SetHeight(28)
+
+		local bg = tbtn:CreateTexture(nil, "BACKGROUND")
+		bg:SetAllPoints()
+		bg:SetColorTexture(0, 0, 0, 0)
+		tbtn.bg = bg
+
+		local accent = tbtn:CreateTexture(nil, "ARTWORK")
+		accent:SetPoint("TOPLEFT", 0, -2)
+		accent:SetPoint("BOTTOMLEFT", 0, 2)
+		accent:SetWidth(3)
+		accent:SetColorTexture(1, 0.5, 0, 1)
+		accent:Hide()
+		tbtn.accent = accent
+
+		local lbl = tbtn:CreateFontString(nil, "OVERLAY")
+		lbl:SetFont(FONT, SMALL_FONT_SIZE + 1, "OUTLINE")
+		lbl:SetPoint("LEFT", 12, 0)
+		lbl:SetText(tab.label)
+		lbl:SetTextColor(0.76, 0.76, 0.82)
+		tbtn.label = lbl
+
+		tbtn:SetScript("OnEnter", function(self)
+			if not self._active then
+				self.bg:SetColorTexture(1, 1, 1, 0.05)
+				self.label:SetTextColor(1, 1, 1)
+			end
+		end)
+		tbtn:SetScript("OnLeave", function(self)
+			if not self._active then
+				self.bg:SetColorTexture(0, 0, 0, 0)
+				self.label:SetTextColor(0.76, 0.76, 0.82)
+			end
+		end)
+		tbtn:SetScript("OnClick", function()
+			SelectTab(tab.id)
+		end)
+		tabButtons[tab.id] = tbtn
+	end
+
+	-- Page 1: General
+	do
+		local p = pages.general
+		local card1 = CreateCard(p, "Names & Visuals", 158, 12)
+		local generalVisuals = {
+			{ key = "firstNameOnly", label = "First Name Only (hide Forever surnames)", tip = "Show only the first name on player unit frames." },
+			{ key = "shortRaceNames", label = "Shorten Long Race & Creature Names", tip = "Shorten compound race names (e.g. Windshaper Skyborne -> Skyborne)." },
+			{ key = "hideSelfInfo", label = "Hide Player Name & Level at Max Level", tip = "Keep your player power bar uncluttered at max level." },
+			{ key = "enableHealthPrediction", label = "Incoming Heals & Absorb Shields", tip = "Show incoming heal predictions and absorb overlays on health bars." },
+			{ key = "enableThreatHighlight", label = "Aggro / Threat Backdrop Highlight", tip = "Highlight unit frame borders when a unit holds aggro or high threat." },
+		}
+		for i, def in ipairs(generalVisuals) do
+			CreateToggleRow(card1, def, i)
+		end
+
+		local card2 = CreateCard(p, "Behavior & Interface", 110, 182)
+		local generalBehavior = {
+			{ key = "enableFader", label = "Fade Player & Pet Out of Combat", tip = "Smoothly fade Player and Pet frames when idle with no target." },
+			{ key = "removeBuffs", label = "Hide Default Blizzard Buff Frame", tip = "Disable Blizzard's top-right buff and weapon enchant frames." },
+			{ key = "showMinimapIcon", label = "Show Minimap Quick Toggle Icon", tip = "Display the draggable 'B' button around the minimap." },
+		}
+		for i, def in ipairs(generalBehavior) do
+			CreateToggleRow(card2, def, i)
+		end
+	end
+
+	-- Page 2: Unit Frames
+	do
+		local p = pages.frames
+		local card1 = CreateCard(p, "Frames & Portraits", 158, 12)
+		local frameToggles = {
+			{ key = "showPortraits", label = "Show Portraits (Player & Target)", tip = "Display framed portrait boxes beside Player and Target frames." },
+			{
+				key = "use2DPortraits",
+				label = "Use 2D Portraits (instead of 3D Models)",
+				tip = "Render cropped square 2D portraits instead of animated 3D models.",
+				indent = true,
+				dependsOn = "showPortraits",
+				dependsLabel = "Show Portraits (Player & Target)",
+			},
+			{ key = "showTargetTarget", label = "Show Target of Target (ToT)", tip = "Display your target's current target." },
+			{ key = "showTargetTargetTarget", label = "Show Target of Target's Target (ToToT)", tip = "Display your target's target's target below ToT." },
+			{ key = "showBossFrames", label = "Enable Boss Frames (Boss 1-5)", tip = "Spawn dedicated encounter boss frames on the right." },
+		}
+		for i, def in ipairs(frameToggles) do
+			CreateToggleRow(card1, def, i)
+		end
+
+		local card2 = CreateCard(p, "Class & Combat Bars", 134, 182)
+		local classBars = {
+			{ key = "enableClassPower", label = "Player Class Power & Monk Stagger Bar", tip = "Show Holy Power, Chi, Soul Shards, Arcane Charges, Essence, or Stagger." },
+			{ key = "enableSwingBar", label = "Player Swing Timer Bar", tip = "Display melee and ranged auto-attack swing timer bars." },
+			{ key = "enableTotemBar", label = "Clickable Totem Bar above Player", tip = "Style and anchor Shaman/class totems above your Player frame." },
+			{ key = "oUFRuneBar", label = "Use oUF Death Knight Rune Bar", tip = "Replace Blizzard's default Death Knight Rune Frame with oUF runes." },
+		}
+		for i, def in ipairs(classBars) do
+			CreateToggleRow(card2, def, i)
+		end
+	end
+
+	-- Page 3: Auras & Casts
+	do
+		local p = pages.auras
+		local card1 = CreateCard(p, "Unit Auras & Castbars", 168, 12)
+
+		local colBuffsX, colDebuffsX, colCastX = 205, 285, 365
+		local colHeaders = {
+			{ text = "Unit", x = 14, align = "LEFT" },
+			{ text = "Buffs", x = colBuffsX, align = "CENTER" },
+			{ text = "Debuffs", x = colDebuffsX, align = "CENTER" },
+			{ text = "Castbar", x = colCastX, align = "CENTER" },
+		}
+		for _, ch in ipairs(colHeaders) do
+			local fs = card1:CreateFontString(nil, "OVERLAY")
+			fs:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+			fs:SetTextColor(0.65, 0.65, 0.72)
+			if ch.align == "LEFT" then
+				fs:SetPoint("TOPLEFT", ch.x, -34)
+			else
+				fs:SetPoint("TOP", card1, "TOPLEFT", ch.x, -34)
+			end
+			fs:SetText(ch.text)
+		end
+
+		local matrixRows = {
+			{ unit = "Player", buffs = "playerShowBuffs", debuffs = "playerShowDebuffs", cast = "playerCastBar" },
+			{ unit = "Target", buffs = "targetShowBuffs", debuffs = "targetShowDebuffs", cast = "targetCastBar" },
+			{ unit = "Focus", buffs = "focusShowBuffs", debuffs = "focusShowDebuffs", cast = "focusCastBar" },
+			{ unit = "Party", buffs = "partyShowBuffs", debuffs = "partyShowDebuffs", cast = nil },
+		}
+		for idx, r in ipairs(matrixRows) do
+			local rowY = 54 + (idx - 1) * 27
+			if idx % 2 == 1 then
+				local stripe = card1:CreateTexture(nil, "BACKGROUND")
+				stripe:SetPoint("TOPLEFT", 10, -rowY + 2)
+				stripe:SetPoint("TOPRIGHT", -10, -rowY + 2)
+				stripe:SetHeight(24)
+				stripe:SetColorTexture(1, 1, 1, 0.025)
+			end
+
+			local unitLabel = card1:CreateFontString(nil, "OVERLAY")
+			unitLabel:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+			unitLabel:SetPoint("TOPLEFT", 14, -(rowY + 4))
+			unitLabel:SetTextColor(0.92, 0.92, 0.95)
+			unitLabel:SetText(r.unit)
+
+			CreateMatrixCell(card1, r.buffs, "Show " .. r.unit .. " Buffs", colBuffsX, rowY)
+			CreateMatrixCell(card1, r.debuffs, "Show " .. r.unit .. " Debuffs", colDebuffsX, rowY)
+			if r.cast then
+				CreateMatrixCell(card1, r.cast, "Show " .. r.unit .. " Castbar", colCastX, rowY)
+			else
+				local dash = card1:CreateFontString(nil, "OVERLAY")
+				dash:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+				dash:SetPoint("TOP", card1, "TOPLEFT", colCastX, -(rowY + 4))
+				dash:SetTextColor(0.4, 0.4, 0.45)
+				dash:SetText("-")
+			end
+		end
+
+		local card2 = CreateCard(p, "Aura Filtering & Highlights", 110, 192)
+		local auraExtras = {
+			{ key = "desaturateOtherDebuffs", label = "Prioritize Player Debuffs & Desaturate Others", tip = "Sort your debuffs first on Target/Boss and grey out others' debuffs." },
+			{ key = "highlightDispellableDebuffs", label = "Highlight Dispellable Debuffs (Player Class)", tip = "Border-highlight and prioritize debuffs your class can dispel." },
+			{ key = "highlightExpiringAuras", label = "Highlight Expiring Timers (<=10s / <=5s)", tip = "Turn aura countdown timers yellow at <=10s and red at <=5s." },
+		}
+		for i, def in ipairs(auraExtras) do
+			CreateToggleRow(card2, def, i)
+		end
+	end
+
+	-- Page 4: Party & Raid
+	do
+		local p = pages.group
+		local card1 = CreateCard(p, "Group & Raid Layout", 110, 12)
+		local groupToggles = {
+			{ key = "showRaidFrames", label = "Enable Raid Frames (8-Group Compact Grid)", tip = "Replace Blizzard raid frames with the compact 8-group oUF_Brun grid." },
+			{ key = "hidePartyInRaid", label = "Hide Party Frames when in a Raid", tip = "Hide the 4-member party stack automatically while in a raid group." },
+			{ key = "hideCompactRaidManager", label = "Auto-fade Blizzard Raid Manager Tab", tip = "Fade Blizzard's collapsed raid manager side tab until mouseover." },
+		}
+		for i, def in ipairs(groupToggles) do
+			CreateToggleRow(card1, def, i)
+		end
+
+		local card2 = CreateCard(p, "Healing & Click-Casting", 98, 134)
+		CreateToggleRow(card2, {
+			key = "enableClickCast",
+			label = "HealKit Smart Click-Casting (Party & Raid)",
+			tip = "Bind class-aware heals and dispels directly on Party & Raid frames.",
+		}, 1)
+
+		local bindNote = card2:CreateFontString(nil, "OVERLAY")
+		bindNote:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+		bindNote:SetPoint("TOPLEFT", 16, -62)
+		bindNote:SetPoint("TOPRIGHT", -14, -62)
+		bindNote:SetJustifyH("LEFT")
+		bindNote:SetTextColor(0.62, 0.62, 0.68)
+		bindNote:SetText("M1: Quick Heal   |   M2: Big / HoT Heal   |   M3: Dispel   |   Shift-Click: Target")
+	end
+
+	-- Footer action buttons (4 equal-width 128px buttons, zero text overflow)
+	local moverBtn = CreateActionButton(footerBar, "Unlock Movers", 128, 26, function()
 		if InCombatLockdown() then return end
 		manualMoversUnlocked = not manualMoversUnlocked
 		UpdateEditModeMovers()
-		UpdateMoverBtnText()
 	end)
+	moverBtn:SetPoint("LEFT", 15, 0)
+	moverBtnRef = moverBtn
+	UpdateMoverBtnState()
 
-	local testBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-	testBtn:SetSize(92, 24)
-	testBtn:SetPoint("LEFT", moverBtn, "RIGHT", 8, 0)
-	testBtnRef = testBtn
-	UpdateTestBtnText()
-	testBtn:SetScript("OnClick", function()
+	local testBtn = CreateActionButton(footerBar, "Test Frames", 128, 26, function()
 		ToggleTestFrames()
 	end)
+	testBtn:SetPoint("LEFT", moverBtn, "RIGHT", 12, 0)
+	testBtnRef = testBtn
+	UpdateTestBtnText()
 
-	local resetBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-	resetBtn:SetSize(92, 24)
-	resetBtn:SetPoint("LEFT", testBtn, "RIGHT", 8, 0)
-	resetBtn:SetText("Reset Defaults")
-	resetBtn:SetScript("OnClick", function()
+	local resetBtn = CreateActionButton(footerBar, "Reset Defaults", 128, 26, function()
 		if InCombatLockdown() then return end
 		table.wipe(GetOptionsDB())
 		table.wipe(GetPositionsDB())
@@ -1629,21 +2190,28 @@ local function ToggleConfigGUI()
 			mover.anchor:SetPoint(unpack(mover.defaultPoint))
 		end
 		ApplySavedOptions()
+		RefreshDependencies()
+		reloadNeeded = true
+		UpdateReloadHint()
 	end)
+	resetBtn:SetPoint("LEFT", testBtn, "RIGHT", 12, 0)
 
-	local reloadBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-	reloadBtn:SetSize(92, 24)
-	reloadBtn:SetPoint("BOTTOMRIGHT", -14, 12)
-	reloadBtn:SetText("Reload UI")
-	reloadBtn:SetScript("OnClick", ReloadUI)
+	reloadBtn = CreateActionButton(footerBar, "Reload UI", 128, 26, ReloadUI)
+	reloadBtn:SetPoint("RIGHT", -15, 0)
+
+	SelectTab("general")
+	RefreshDependencies()
+	UpdateReloadHint()
 
 	f:SetScript("OnShow", function()
 		local curOpts = GetOptionsDB()
 		for k, cb in pairs(checkboxes) do
 			cb:SetChecked(curOpts[k])
 		end
-		UpdateMoverBtnText()
+		RefreshDependencies()
+		UpdateMoverBtnState()
 		UpdateTestBtnText()
+		UpdateReloadHint()
 	end)
 
 	configFrame = f
@@ -1736,8 +2304,8 @@ local function CreateMinimapButton()
 			if InCombatLockdown() then return end
 			manualMoversUnlocked = not manualMoversUnlocked
 			UpdateEditModeMovers()
-		else
-			ToggleConfigGUI()
+		elseif ns.ToggleConfigGUI then
+			ns.ToggleConfigGUI()
 		end
 	end)
 
@@ -1766,8 +2334,8 @@ SlashCmdList["OUFBRUN"] = function(msg)
 		UpdateEditModeMovers()
 	elseif msg == "test" then
 		ToggleTestFrames()
-	else
-		ToggleConfigGUI()
+	elseif ns.ToggleConfigGUI then
+		ns.ToggleConfigGUI()
 	end
 end
 
@@ -1964,6 +2532,46 @@ local function CreateSwingBars(self)
 			bar.Time = timeText
 		end
 	end
+end
+
+--===================================================--
+-- Portrait Box (3D Model or 2D Texture, Player & Target)
+--===================================================--
+
+local function CreatePortrait(self, side)
+	local holder = CreateFrame("Frame", nil, self)
+	holder:SetSize(height, height)
+	ApplyBackdrop(holder)
+	if side == "LEFT" then
+		holder:SetPoint("TOPRIGHT", self, "TOPLEFT", -5, 0)
+		holder:SetPoint("BOTTOMRIGHT", self, "BOTTOMLEFT", -5, 0)
+	else
+		holder:SetPoint("TOPLEFT", self, "TOPRIGHT", 5, 0)
+		holder:SetPoint("BOTTOMLEFT", self, "BOTTOMRIGHT", 5, 0)
+	end
+
+	local bg = holder:CreateTexture(nil, "BACKGROUND")
+	bg:SetAllPoints()
+	bg:SetColorTexture(0.08, 0.08, 0.1, 0.85)
+	holder.bg = bg
+
+	local portrait
+	if use2DPortraits then
+		portrait = holder:CreateTexture(nil, "ARTWORK")
+		portrait:SetAllPoints(holder)
+		portrait:SetTexCoord(0.15, 0.85, 0.15, 0.85)
+	else
+		portrait = CreateFrame("PlayerModel", nil, holder)
+		portrait:SetAllPoints(holder)
+		portrait.PostUpdate = function(element)
+			if element.SetModelAlpha and self.GetAlpha then
+				element:SetModelAlpha(self:GetAlpha())
+			end
+		end
+	end
+
+	self.PortraitHolder = holder
+	self.Portrait = portrait
 end
 
 --===================================================--
@@ -2264,6 +2872,9 @@ local UnitSpecific = {
 		CreatePrivateAuras(self, 20, "BOTTOMRIGHT", hp, "TOPRIGHT", 0, playerShowBuffs and 30 or 4, "LEFT")
 		CreateTotemBar(self)
 		CreateSwingBars(self)
+		if showPortraits then
+			CreatePortrait(self, "LEFT")
+		end
 		UpdatePlayerBottomOffsets()
 	end,
 
@@ -2330,6 +2941,9 @@ local UnitSpecific = {
 		if targetShowDebuffs then
 			local debuffs = CreateAuraWidget(self, "TARGET_DEBUFFS", width, targetDebuffSize, targetDebuffSpacing, "RIGHT", "DOWN")
 			debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -EXPREPBARGAP)
+		end
+		if showPortraits then
+			CreatePortrait(self, "RIGHT")
 		end
 	end,
 
@@ -2399,24 +3013,24 @@ local function Shared(self, unit, isSingle)
 	local fontSize = isTargetTarget and SMALL_FONT_SIZE or FONT_SIZE
 
 	local frameWidth, frameHeight = width, height
-	local hpHeight, ppHeight = height * 0.6, height * 0.4
+	local hpHeight = height * 0.6
 	if unit == "focustarget" then
 		frameWidth, frameHeight = partyPetAndTargetWidth + 30, focusHeight
-		hpHeight, ppHeight = focusHeight * 0.6, focusHeight * 0.4
+		hpHeight = focusHeight * 0.6
 	elseif isTargetTarget then
 		frameWidth, frameHeight = targetTargetWidth, targetTargetHeight
-		hpHeight, ppHeight = targetTargetHeight * 0.6, targetTargetHeight * 0.4
+		hpHeight = targetTargetHeight * 0.6
 	elseif unit == "pet" then
 		frameWidth, frameHeight = petWidth, petHeight
-		hpHeight, ppHeight = petHeight * 0.8, petHeight * 0.2
+		hpHeight = petHeight * 0.8
 	elseif unit == "focus" then
 		frameWidth, frameHeight = focusWidth, focusHeight
-		hpHeight, ppHeight = focusHeight * 0.6, focusHeight * 0.4
+		hpHeight = focusHeight * 0.6
 	elseif isPartySubUnit then
 		hpHeight = partyPetAndTargetHeight
 	elseif unit == "party" or unit == "boss" then
 		frameWidth, frameHeight = partyWidth, partyHeight
-		hpHeight, ppHeight = partyHeight * 0.6, partyHeight * 0.4
+		hpHeight = partyHeight * 0.6
 	end
 
 	self:SetScript("OnEnter", UnitFrameOnEnter)
@@ -2476,8 +3090,10 @@ local function Shared(self, unit, isSingle)
 		local pp = CreateFrame("StatusBar", nil, self)
 		pp:SetPoint("TOPRIGHT", hp, "BOTTOMRIGHT", 0, -1)
 		pp:SetPoint("TOPLEFT", hp, "BOTTOMLEFT", 0, -1)
+		-- Anchor bottom to self so hp + 1px divider + pp stays flush within frameHeight.
+		pp:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, 0)
+		pp:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", 0, 0)
 		pp:SetStatusBarTexture(TEXTURE)
-		pp:SetHeight(ppHeight)
 		pp.frequentUpdates = true
 		pp.colorDisconnected = true
 		pp.colorTapping = true
@@ -2607,6 +3223,8 @@ end
 ns.FONT = FONT
 ns.TEXTURE = TEXTURE
 ns.HIGHLIGHT = HIGHLIGHT
+ns.FONT_SIZE = FONT_SIZE
+ns.SMALL_FONT_SIZE = SMALL_FONT_SIZE
 ns.RAID_FONT_SIZE = RAID_FONT_SIZE
 ns.raidWidth = raidWidth
 ns.raidHeight = raidHeight
@@ -2621,6 +3239,28 @@ ns.CreateHealthPrediction = CreateHealthPrediction
 ns.CreateAuraWidget = CreateAuraWidget
 ns.CreatePositionAnchor = CreatePositionAnchor
 ns.RegisterClickCastFrame = RegisterClickCastFrame
+ns.GetOptionsDB = GetOptionsDB
+ns.GetPositionsDB = GetPositionsDB
+ns.ApplySavedOptions = ApplySavedOptions
+ns.ToggleTestFrames = ToggleTestFrames
+ns.IsTestModeActive = function() return testModeActive end
+ns.IsMoversUnlocked = function() return manualMoversUnlocked end
+ns.ToggleMovers = function()
+	if InCombatLockdown() then return end
+	manualMoversUnlocked = not manualMoversUnlocked
+	UpdateEditModeMovers()
+end
+ns.ResetDefaults = function()
+	table.wipe(GetOptionsDB())
+	table.wipe(GetPositionsDB())
+	local freshOpts = GetOptionsDB()
+	for _, mover in pairs(movers) do
+		mover.anchor:ClearAllPoints()
+		mover.anchor:SetPoint(unpack(mover.defaultPoint))
+	end
+	ApplySavedOptions()
+	return freshOpts
+end
 ns.IsRaidFramesEnabled = function() return showRaidFrames end
 ns.IsHealthPredictionEnabled = function() return enableHealthPrediction end
 ns.IsThreatHighlightEnabled = function() return enableThreatHighlight end
@@ -2664,7 +3304,8 @@ local function SpawnFrames(self)
 	local focusTargetAnchor = CreatePositionAnchor("FocusTarget", partyPetAndTargetWidth + 30, focusHeight, oUF_Brun.FocusTarget)
 	self:Spawn("focustarget", "oUF_FocusTarget"):SetPoint("CENTER", focusTargetAnchor, "CENTER", 0, 0)
 
-	local petAnchor = CreatePositionAnchor("Pet", petWidth, petHeight, oUF_Brun.Pet)
+	local petDefault = showPortraits and { "RIGHT", "oUF_player", "LEFT", -(height + 20), 0 } or oUF_Brun.Pet
+	local petAnchor = CreatePositionAnchor("Pet", petWidth, petHeight, petDefault)
 	self:Spawn("pet", "oUF_Pet"):SetPoint("CENTER", petAnchor, "CENTER", 0, 0)
 
 	if showBossFrames and MAX_BOSS_FRAMES then
