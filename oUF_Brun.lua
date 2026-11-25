@@ -224,16 +224,17 @@ local function PostUpdateBarColor(element, unitOrColor, color, altR, altG, altB)
 end
 
 local function UpdateTargetComboPoints(self, event, _, powerType)
-	if event == "UNIT_POWER_UPDATE" and powerType ~= "COMBO_POINTS" then
+	if (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT") and powerType ~= "COMBO_POINTS" then
 		return
 	end
 
 	local cp = 0
 	if UnitExists("target") then
+		local unit = (UnitHasVehicleUI and UnitHasVehicleUI("player")) and "vehicle" or "player"
 		if GetComboPoints then
-			cp = GetComboPoints("player", "target") or 0
+			cp = GetComboPoints(unit, "target") or 0
 		else
-			cp = UnitPower("player", Enum.PowerType.ComboPoints) or 0
+			cp = UnitPower(unit, Enum.PowerType.ComboPoints) or 0
 		end
 	end
 
@@ -2013,17 +2014,21 @@ local UnitSpecific = {
 		local function UpdatePlayerBottomOffsets()
 			local gap = 0
 			local secondaryBars = { self.AdditionalPower, self.Runes, self.ClassPowerBar, self.Stagger }
-			for _, bar in ipairs(secondaryBars) do
+			for i = 1, 4 do
+				local bar = secondaryBars[i]
 				if bar and bar:IsShown() then
+					bar:ClearAllPoints()
 					bar:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -3 - gap)
 					gap = gap + 11
 				end
 			end
 			if self.Castbar then
+				self.Castbar:ClearAllPoints()
 				self.Castbar:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -2 - gap)
 				self.Castbar:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT", 0, -2 - gap)
 			end
 			if self.PlayerDebuffs then
+				self.PlayerDebuffs:ClearAllPoints()
 				self.PlayerDebuffs:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -EXPREPBARGAP - gap + 2)
 				self.PlayerDebuffs:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT", 0, -EXPREPBARGAP - gap + 2)
 			end
@@ -2156,7 +2161,7 @@ local UnitSpecific = {
 			self.Stagger = stagger
 		end
 
-		if enableClassPower and playerClass ~= "DEATHKNIGHT" then
+		if enableClassPower and playerClass ~= "DEATHKNIGHT" and playerClass ~= "ROGUE" and playerClass ~= "DRUID" then
 			local classPowerBar = CreateFrame("Frame", nil, self)
 			classPowerBar:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -3)
 			classPowerBar:SetSize(width, 7)
@@ -2284,7 +2289,7 @@ local UnitSpecific = {
 
 	target = function(self)
 		local hp, pp = self.Health, self.Power
-		if not enableClassPower and (playerClass == "ROGUE" or playerClass == "DRUID") then
+		if playerClass == "ROGUE" or playerClass == "DRUID" then
 			self.CPoints = {}
 			for i = 1, 5 do
 				local dot = pp:CreateTexture(nil, "OVERLAY")
@@ -2309,7 +2314,9 @@ local UnitSpecific = {
 			local cpWatcher = CreateFrame("Frame", nil, self)
 			cpWatcher.CPoints = self.CPoints
 			cpWatcher:RegisterUnitEvent("UNIT_POWER_UPDATE", "player", "vehicle")
+			cpWatcher:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player", "vehicle")
 			cpWatcher:RegisterEvent("PLAYER_TARGET_CHANGED")
+			cpWatcher:RegisterEvent("PLAYER_ENTERING_WORLD")
 			cpWatcher:SetScript("OnEvent", UpdateTargetComboPoints)
 		end
 
