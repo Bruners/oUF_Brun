@@ -54,6 +54,11 @@ local showRaidFrames = true				-- Spawn 8-group compact raid grid inside raid gr
 local enableClickCast = false			-- Enable HealKit-style click-casting (M1/M2 heal, M3 dispel) on Party & Raid frames.
 local showPortraits = false				-- Show portrait frames beside Player and Target.
 local use2DPortraits = false			-- Use 2D portrait textures instead of 3D models when portraits are enabled.
+local healthColorMode = "class"			-- Health bar color mode: "class", "blizzard" (green), or "custom".
+local healthColorPlayerOnly = false		-- Keep default class colors on other units when Player uses Blizzard/Custom.
+local threatStyle = "backdrop"			-- Aggro indicator style: "backdrop", "glow", "tint", "badge", or "both".
+local showTargetThreat = false			-- Show live threat % bar above the Target frame.
+local targetThreatRawPct = false		-- Show raw pull threshold threat % (110% / 130%) instead of scaled 100%.
 
 ns.firstNameOnly = firstNameOnly
 ns.shortRaceNames = shortRaceNames
@@ -146,6 +151,34 @@ oUF.colors.power.RUNIC_POWER:SetRGB(48 / 255, 113 / 255, 191 / 255)
 oUF.colors.tapped:SetRGB(0.55, 0.57, 0.61)
 oUF.colors.disconnected:SetRGB(0.7, 0.7, 0.7)
 
+local DEFAULT_CLASS_COLORS = {}
+if oUF.colors and oUF.colors.class then
+	for token, colorObj in pairs(oUF.colors.class) do
+		if type(colorObj) == "table" then
+			if colorObj.GetRGB then
+				local r, g, b = colorObj:GetRGB()
+				DEFAULT_CLASS_COLORS[token] = { r, g, b }
+			elseif colorObj[1] then
+				DEFAULT_CLASS_COLORS[token] = { colorObj[1], colorObj[2], colorObj[3] }
+			elseif colorObj.r then
+				DEFAULT_CLASS_COLORS[token] = { colorObj.r, colorObj.g, colorObj.b }
+			end
+		end
+	end
+end
+
+function ns.GetDefaultClassColor(classToken)
+	local def = classToken and DEFAULT_CLASS_COLORS[classToken]
+	if def then
+		return def[1], def[2], def[3]
+	end
+	local raidClr = classToken and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
+	if raidClr then
+		return raidClr.r, raidClr.g, raidClr.b
+	end
+	return 0.5, 0.5, 0.5
+end
+
 if removeBuffs then
 	if BuffFrame then
 		BuffFrame:UnregisterAllEvents()
@@ -214,6 +247,18 @@ end
 
 -- Sync background texture tint with the parent Health/Power statusbar color.
 local function PostUpdateBarColor(element, unitOrColor, color, altR, altG, altB)
+	if healthColorPlayerOnly and healthColorMode == "custom" and element.__owner and element == element.__owner.Health and element.__owner.__unit == "player" then
+		local classDB = ns.GetClassColorsDB and ns.GetClassColorsDB()
+		local c = classDB and playerClass and classDB[playerClass]
+		if type(c) == "table" and (c.r or c[1]) then
+			local r, g, b = c.r or c[1], c.g or c[2], c.b or c[3]
+			element:SetStatusBarColor(r, g, b)
+			if element.bg then
+				element.bg:SetVertexColor(r, g, b)
+			end
+			return
+		end
+	end
 	local bg = element.bg
 	if not bg then return end
 	if type(unitOrColor) == "table" and unitOrColor.GetRGB then
@@ -733,15 +778,243 @@ local function CreatePrivateAuras(self, size, point, relFrame, relPoint, x, y, g
 	self.PrivateAuras = pa
 end
 
+local THREAT_EDGE_BACKDROP = {
+	edgeFile = "Interface\\Buttons\\WHITE8X8",
+	edgeSize = 2,
+}
+
+local THREAT_BADGE_BACKDROP = {
+	bgFile = "Interface\\Buttons\\WHITE8X8",
+	edgeFile = "Interface\\Buttons\\WHITE8X8",
+	edgeSize = 1,
+}
+
+local function GetThreatRGB(status, color)
+	if status == 3 then
+		return 1, 0.15, 0.15
+	elseif status == 2 then
+		return 1, 0.48, 0.08
+	elseif status == 1 then
+		return 1, 0.85, 0.1
+	elseif color and color.GetRGB then
+		return color:GetRGB()
+	end
+	return 1, 0.15, 0.15
+end
+
+local THREAT_GLOW_RING_BACKDROP = {
+	edgeFile = "Interface\\Buttons\\WHITE8X8",
+	edgeSize = 1,
+}
+
+local function ApplyEdgeBackdrop(widget, backdropDef)
+	if not widget.SetBackdrop and BackdropTemplateMixin then
+		Mixin(widget, BackdropTemplateMixin)
+		if widget.OnBackdropLoaded then widget:OnBackdropLoaded() end
+	end
+	if widget.SetBackdrop then
+		widget:SetBackdrop(backdropDef)
+	end
+end
+
+local function EnsureThreatBorder(frame)
+	if frame.ThreatBorder then return frame.ThreatBorder end
+	local border = CreateFrame("Frame", nil, frame, BackdropTemplateMixin and "BackdropTemplate" or nil)
+	border:SetPoint("TOPLEFT", frame, "TOPLEFT", -2, 2)
+	border:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 2, -2)
+	border:SetFrameLevel(math.max(0, frame:GetFrameLevel() + 1))
+	ApplyEdgeBackdrop(border, THREAT_EDGE_BACKDROP)
+	border:Hide()
+	frame.ThreatBorder = border
+	return border
+end
+
+local function EnsureThreatGlow(frame)
+	if frame.ThreatGlow then return frame.ThreatGlow end
+	local glow = CreateFrame("Frame", nil, frame)
+	glow:SetAllPoints(frame)
+	glow:SetFrameLevel(math.max(0, frame:GetFrameLevel() - 1))
+
+	local isCompact = (frame:GetHeight() <= 26)
+	local specs = isCompact
+		and { { 3, 0.72 }, { 4, 0.42 }, { 5, 0.18 } }
+		or { { 3, 0.72 }, { 4, 0.48 }, { 5, 0.28 }, { 6, 0.15 }, { 7, 0.07 } }
+
+	local rings = {}
+	for i, spec in ipairs(specs) do
+		local outset, alpha = spec[1], spec[2]
+		local ring = CreateFrame("Frame", nil, glow, BackdropTemplateMixin and "BackdropTemplate" or nil)
+		ring:SetPoint("TOPLEFT", frame, "TOPLEFT", -outset, outset)
+		ring:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", outset, -outset)
+		ring:SetFrameLevel(glow:GetFrameLevel())
+		ApplyEdgeBackdrop(ring, THREAT_GLOW_RING_BACKDROP)
+		ring._alpha = alpha
+		rings[i] = ring
+	end
+
+	glow.rings = rings
+	function glow:SetGlowColor(r, g, b)
+		for _, ring in ipairs(self.rings) do
+			if ring.SetBackdropBorderColor then
+				ring:SetBackdropBorderColor(r, g, b, ring._alpha)
+			end
+		end
+	end
+
+	glow:Hide()
+	frame.ThreatGlow = glow
+	return glow
+end
+
+local function EnsureThreatBadge(frame)
+	if frame.ThreatBadge then return frame.ThreatBadge end
+	local compact = (frame:GetHeight() <= 26)
+	local unit = frame.__unit or (frame.GetAttribute and frame:GetAttribute("unit")) or ""
+	local isParty = type(unit) == "string" and unit:match("^party") ~= nil
+
+	local badge = CreateFrame("Frame", nil, frame, BackdropTemplateMixin and "BackdropTemplate" or nil)
+	badge:SetFrameLevel(frame:GetFrameLevel() + 6)
+	if not badge.SetBackdrop and BackdropTemplateMixin then
+		Mixin(badge, BackdropTemplateMixin)
+		if badge.OnBackdropLoaded then badge:OnBackdropLoaded() end
+	end
+	if badge.SetBackdrop then
+		badge:SetBackdrop(THREAT_BADGE_BACKDROP)
+		badge:SetBackdropColor(compact and 0.08 or 0.06, compact and 0.08 or 0.06, compact and 0.1 or 0.08, compact and 0.95 or 0.92)
+	end
+
+	local txt = badge:CreateFontString(nil, "OVERLAY")
+	txt:SetFont(FONT, 9, "OUTLINE")
+	txt:SetPoint("CENTER", 0, 0)
+	if compact then
+		badge:SetSize(10, 10)
+		badge:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 1, 1)
+		txt:SetText("!")
+	else
+		badge:SetSize(44, 13)
+		if isParty then
+			badge:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", 0, 4)
+		else
+			badge:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, 4)
+		end
+		txt:SetText("AGGRO")
+	end
+
+	badge.compact = compact
+	badge.isParty = isParty
+	badge.text = txt
+	badge:Hide()
+	frame.ThreatBadge = badge
+	return badge
+end
+
 local function PostUpdateThreat(element, _, status, color)
 	local frame = element.__owner
-	if not frame or not frame.SetBackdropColor then return end
-	if status and not issecretvalue(status) and status > 0 and color then
-		local r, g, b = color:GetRGB()
-		frame:SetBackdropColor(r * 0.75, g * 0.15, b * 0.15, 0.95)
-	else
-		frame:SetBackdropColor(0, 0, 0, 0.9)
+	if not frame then return end
+
+	if not enableThreatHighlight or not status or issecretvalue(status) or status <= 0 then
+		if frame.SetBackdropColor then
+			frame:SetBackdropColor(0, 0, 0, 0.9)
+		end
+		if frame.ThreatBorder then frame.ThreatBorder:Hide() end
+		if frame.ThreatGlow then frame.ThreatGlow:Hide() end
+		if frame.ThreatBadge then frame.ThreatBadge:Hide() end
+		return
 	end
+
+	local r, g, b = GetThreatRGB(status, color)
+	local style = threatStyle or "backdrop"
+
+	if frame.SetBackdropColor then
+		if style == "tint" then
+			frame:SetBackdropColor(r * 0.85, g * 0.85, b * 0.85, 0.95)
+		else
+			-- Keep the interior pure black for non-tint modes so bars stay clean.
+			frame:SetBackdropColor(0, 0, 0, 0.9)
+		end
+	end
+
+	if style == "backdrop" then
+		local border = EnsureThreatBorder(frame)
+		if border.SetBackdropBorderColor then
+			border:SetBackdropBorderColor(r, g, b, 0.95)
+		end
+		border:Show()
+	elseif frame.ThreatBorder then
+		frame.ThreatBorder:Hide()
+	end
+
+	if style == "glow" or style == "both" then
+		local glow = EnsureThreatGlow(frame)
+		glow:SetGlowColor(r, g, b)
+		glow:Show()
+	elseif frame.ThreatGlow then
+		frame.ThreatGlow:Hide()
+	end
+
+	if style == "badge" or style == "both" then
+		local badge = EnsureThreatBadge(frame)
+		if badge.SetBackdropBorderColor then
+			badge:SetBackdropBorderColor(r, g, b, 1)
+		end
+		if not badge.compact then
+			badge.text:SetText(status == 3 and "AGGRO" or (status == 2 and "HIGH" or "THREAT"))
+			badge:ClearAllPoints()
+			if frame.ThreatBar and frame.ThreatBar:IsShown() then
+				badge:SetPoint("LEFT", frame.ThreatBar, "RIGHT", 5, 0)
+			elseif badge.isParty then
+				badge:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", 0, 4)
+			else
+				badge:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, 4)
+			end
+		end
+		badge.text:SetTextColor(r, g, b)
+		badge:Show()
+	elseif frame.ThreatBadge then
+		frame.ThreatBadge:Hide()
+	end
+end
+
+local targetThreatWatcher
+
+local function UpdateTargetThreat(watcher)
+	local threatBar = watcher and watcher.ThreatBar
+	if not threatBar then return end
+
+	if not showTargetThreat or not UnitDetailedThreatSituation or not UnitExists("target") or UnitIsDeadOrGhost("target") or not UnitCanAttack("player", "target") then
+		threatBar:Hide()
+		return
+	end
+
+	local isTanking, status, threatPct, rawThreatPct = UnitDetailedThreatSituation("player", "target")
+	if status == nil or issecretvalue(status) or issecretvalue(threatPct) or issecretvalue(rawThreatPct) then
+		threatBar:Hide()
+		return
+	end
+
+	local pct = targetThreatRawPct and (rawThreatPct or threatPct) or threatPct
+	if not pct or issecretvalue(pct) then
+		threatBar:Hide()
+		return
+	end
+
+	local rounded = math.floor(pct + 0.5)
+	local r, g, b
+	if status == 3 or isTanking then
+		r, g, b = 0.95, 0.18, 0.18
+	elseif status == 2 then
+		r, g, b = 1, 0.48, 0.08
+	elseif status == 1 or rounded >= 80 then
+		r, g, b = 1, 0.82, 0.1
+	else
+		r, g, b = 0.35, 0.78, 0.38
+	end
+
+	threatBar:SetValue(math.min(100, math.max(0, pct)))
+	threatBar:SetStatusBarColor(r, g, b)
+	threatBar.bg:SetVertexColor(r, g, b)
+	threatBar.text:SetFormattedText("%d%%", rounded)
+	threatBar:Show()
 end
 
 --===================================================--
@@ -1242,6 +1515,67 @@ end
 local movers = {}
 local manualMoversUnlocked = false
 
+local function ApplyHealthColors()
+	local mode = healthColorMode
+	local useSharedCustom = (mode == "custom" and not healthColorPlayerOnly)
+	local customColors = ns.GetClassColorsDB and ns.GetClassColorsDB() or nil
+
+	if oUF.colors and oUF.colors.class then
+		for token, colorObj in pairs(oUF.colors.class) do
+			local r, g, b
+			if useSharedCustom and customColors and type(customColors[token]) == "table" then
+				local c = customColors[token]
+				r, g, b = c.r or c[1], c.g or c[2], c.b or c[3]
+			end
+			if not r or not g or not b then
+				r, g, b = ns.GetDefaultClassColor(token)
+			end
+			if colorObj.SetRGB then
+				colorObj:SetRGB(r, g, b)
+			elseif type(colorObj) == "table" then
+				colorObj[1], colorObj[2], colorObj[3] = r, g, b
+			end
+		end
+	end
+
+	if oUF and oUF.objects then
+		for _, obj in ipairs(oUF.objects) do
+			if obj.Health then
+				local isPlayerFrame = (obj.__unit == "player") or (obj.GetAttribute and obj:GetAttribute("unit") == "player")
+				obj.Health.colorClass = (mode ~= "blizzard") or (healthColorPlayerOnly and not isPlayerFrame)
+				obj.Health.colorReaction = true
+				obj.Health.colorHealth = true
+				if obj.Health.ForceUpdate then
+					obj.Health:ForceUpdate()
+				end
+			end
+		end
+	end
+
+	if ns.RefreshRaidTestDummyColors then
+		ns.RefreshRaidTestDummyColors()
+	end
+end
+
+local function ApplyThreatSettings()
+	if oUF and oUF.objects then
+		for _, obj in ipairs(oUF.objects) do
+			if not enableThreatHighlight then
+				if obj.SetBackdropColor then obj:SetBackdropColor(0, 0, 0, 0.9) end
+				if obj.ThreatBorder then obj.ThreatBorder:Hide() end
+				if obj.ThreatGlow then obj.ThreatGlow:Hide() end
+				if obj.ThreatBadge then obj.ThreatBadge:Hide() end
+			end
+			if obj.ThreatIndicator and obj.ThreatIndicator.ForceUpdate then
+				obj.ThreatIndicator:ForceUpdate()
+			end
+		end
+	end
+	if targetThreatWatcher then
+		UpdateTargetThreat(targetThreatWatcher)
+	end
+end
+
 local function ApplySavedOptions()
 	local opts = ns.GetOptionsDB()
 	enableFader = opts.enableFader
@@ -1251,7 +1585,10 @@ local function ApplySavedOptions()
 	ns.shortRaceNames = shortRaceNames
 	desaturateOtherDebuffs = opts.desaturateOtherDebuffs
 	enableHealthPrediction = opts.enableHealthPrediction
-	enableThreatHighlight = opts.enableThreatHighlight
+	enableThreatHighlight = (opts.enableThreatHighlight ~= false)
+	threatStyle = (opts.threatStyle == "glow" or opts.threatStyle == "tint" or opts.threatStyle == "badge" or opts.threatStyle == "both") and opts.threatStyle or "backdrop"
+	showTargetThreat = (opts.showTargetThreat == true)
+	targetThreatRawPct = (opts.targetThreatRawPct == true)
 	hideSelfInfo = opts.hideSelfInfo
 	hidePartyInRaid = opts.hidePartyInRaid
 	showRaidFrames = (opts.showRaidFrames ~= false)
@@ -1265,6 +1602,8 @@ local function ApplySavedOptions()
 	enableSwingBar = (opts.enableSwingBar ~= false)
 	enableClassPower = (opts.enableClassPower ~= false)
 	useComboDots = (opts.useComboDots == true)
+	healthColorMode = (opts.healthColorMode == "blizzard" or opts.healthColorMode == "custom") and opts.healthColorMode or "class"
+	healthColorPlayerOnly = (opts.healthColorPlayerOnly == true)
 	hideCompactRaidManager = opts.hideCompactRaidManager
 	oUFRuneBar = opts.oUFRuneBar
 	removeBuffs = opts.removeBuffs
@@ -1303,6 +1642,8 @@ local function ApplySavedOptions()
 	if ns.UpdateBlizzardRaidFramesVisibility then
 		ns.UpdateBlizzardRaidFramesVisibility()
 	end
+	ApplyHealthColors()
+	ApplyThreatSettings()
 end
 
 local function FinishMoverDrag(mover)
@@ -2158,6 +2499,41 @@ local UnitSpecific = {
 		if showPortraits then
 			CreatePortrait(self, "RIGHT")
 		end
+
+		local threatBar = CreateFrame("StatusBar", nil, self)
+		threatBar:SetSize(52, 13)
+		threatBar:SetPoint("BOTTOMLEFT", hp, "TOPLEFT", 0, 4)
+		ApplyBackdrop(threatBar)
+		threatBar:SetStatusBarTexture(TEXTURE)
+		threatBar:SetMinMaxValues(0, 100)
+		threatBar:SetValue(0)
+		threatBar:SetFrameLevel(hp:GetFrameLevel() + 4)
+		threatBar:Hide()
+
+		local threatBg = threatBar:CreateTexture(nil, "BORDER")
+		threatBg:SetAllPoints()
+		threatBg:SetTexture(TEXTURE)
+		threatBg:SetAlpha(0.28)
+		threatBar.bg = threatBg
+
+		local threatText = threatBar:CreateFontString(nil, "OVERLAY")
+		threatText:SetFont(FONT, math.max(9, SMALL_FONT_SIZE - 2), "OUTLINE")
+		threatText:SetPoint("CENTER", 0, 0)
+		threatText:SetTextColor(1, 1, 1)
+		threatBar.text = threatText
+
+		local tw = CreateFrame("Frame", nil, self)
+		tw.ThreatBar = threatBar
+		self.ThreatBar = threatBar
+		targetThreatWatcher = tw
+		tw:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
+		tw:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
+		tw:RegisterEvent("PLAYER_TARGET_CHANGED")
+		tw:RegisterEvent("PLAYER_REGEN_ENABLED")
+		tw:RegisterEvent("PLAYER_ENTERING_WORLD")
+		tw:SetScript("OnEvent", UpdateTargetThreat)
+		UpdateTargetThreat(tw)
+
 		if cpWatcher then
 			UpdateTargetComboPoints(cpWatcher, "PLAYER_ENTERING_WORLD")
 		else
@@ -2272,8 +2648,9 @@ local function Shared(self, unit, isSingle)
 	hp:SetAlpha(0.8)
 	hp.colorDisconnected = true
 	hp.colorTapping = true
-	hp.colorClass = true
+	hp.colorClass = (healthColorMode ~= "blizzard") or (healthColorPlayerOnly and unit ~= "player")
 	hp.colorReaction = true
+	hp.colorHealth = true
 	hp.smoothing = smoothInterpolation
 	hp.PostUpdateColor = PostUpdateBarColor
 	self.Health = hp
@@ -2282,7 +2659,7 @@ local function Shared(self, unit, isSingle)
 		CreateHealthPrediction(self)
 	end
 
-	if enableThreatHighlight and not isPartySubUnit and not isTargetTarget then
+	if not isPartySubUnit and not isTargetTarget then
 		self.ThreatIndicator = {
 			IsObjectType = nop,
 			Show = nop,
@@ -2458,6 +2835,26 @@ ns.CreateAuraWidget = CreateAuraWidget
 ns.CreatePositionAnchor = CreatePositionAnchor
 ns.RegisterClickCastFrame = RegisterClickCastFrame
 ns.ApplySavedOptions = ApplySavedOptions
+ns.ApplyHealthColors = ApplyHealthColors
+ns.GetHealthColorMode = function() return healthColorMode end
+ns.UseClassHealthColor = function() return (healthColorMode ~= "blizzard") or healthColorPlayerOnly end
+ns.GetHealthBarColorForClass = function(classToken)
+	if healthColorPlayerOnly then
+		return ns.GetDefaultClassColor(classToken)
+	end
+	if healthColorMode == "blizzard" then
+		return 0.2, 0.76, 0.2
+	end
+	local colorObj = classToken and oUF.colors and oUF.colors.class and oUF.colors.class[classToken]
+	if colorObj then
+		if colorObj.GetRGB then
+			return colorObj:GetRGB()
+		elseif colorObj[1] then
+			return colorObj[1], colorObj[2], colorObj[3]
+		end
+	end
+	return ns.GetDefaultClassColor(classToken)
+end
 ns.ToggleTestFrames = ToggleTestFrames
 ns.IsTestModeActive = function() return testModeActive end
 ns.IsMoversUnlocked = function() return manualMoversUnlocked end
@@ -2469,6 +2866,9 @@ end
 ns.ResetDefaults = function()
 	table.wipe(ns.GetOptionsDB())
 	table.wipe(ns.GetPositionsDB())
+	if type(oUF_BrunDB) == "table" and type(oUF_BrunDB.ClassColors) == "table" then
+		table.wipe(oUF_BrunDB.ClassColors)
+	end
 	local freshOpts = ns.GetOptionsDB()
 	for _, mover in pairs(movers) do
 		mover.anchor:ClearAllPoints()

@@ -18,6 +18,9 @@ local DEFAULT_OPTIONS = {
 	desaturateOtherDebuffs = true,
 	enableHealthPrediction = true,
 	enableThreatHighlight = true,
+	threatStyle = "backdrop",
+	showTargetThreat = false,
+	targetThreatRawPct = false,
 	hideSelfInfo = true,
 	hidePartyInRaid = false,
 	showRaidFrames = true,
@@ -47,6 +50,8 @@ local DEFAULT_OPTIONS = {
 	enableSwingBar = true,
 	enableClassPower = true,
 	useComboDots = false,
+	healthColorMode = "class",
+	healthColorPlayerOnly = false,
 	showMinimapIcon = true,
 }
 
@@ -56,6 +61,12 @@ function ns.GetPositionsDB()
 	if type(oUF_BrunDB) ~= "table" then oUF_BrunDB = {} end
 	if type(oUF_BrunDB.Positions) ~= "table" then oUF_BrunDB.Positions = {} end
 	return oUF_BrunDB.Positions
+end
+
+function ns.GetClassColorsDB()
+	if type(oUF_BrunDB) ~= "table" then oUF_BrunDB = {} end
+	if type(oUF_BrunDB.ClassColors) ~= "table" then oUF_BrunDB.ClassColors = {} end
+	return oUF_BrunDB.ClassColors
 end
 
 function ns.GetOptionsDB()
@@ -75,10 +86,65 @@ local LIVE_OPTIONS = {
 	shortRaceNames = true,
 	showMinimapIcon = true,
 	enableClickCast = true,
+	enableThreatHighlight = true,
+	threatStyle = true,
+	showTargetThreat = true,
+	targetThreatRawPct = true,
 	desaturateOtherDebuffs = true,
 	highlightExpiringAuras = true,
 	highlightDispellableDebuffs = true,
+	healthColorMode = true,
+	healthColorPlayerOnly = true,
 }
+
+local TAB_OPTION_KEYS = {
+	general = {
+		"firstNameOnly", "shortRaceNames", "hideSelfInfo", "enableHealthPrediction",
+		"enableFader", "removeBuffs", "showMinimapIcon",
+	},
+	frames = {
+		"showPortraits", "use2DPortraits", "showTargetTarget", "showTargetTargetTarget",
+		"showBossFrames", "enableClassPower", "useComboDots", "enableSwingBar",
+		"enableTotemBar", "oUFRuneBar",
+	},
+	auras = {
+		"playerShowBuffs", "playerShowDebuffs", "playerCastBar",
+		"targetShowBuffs", "targetShowDebuffs", "targetCastBar",
+		"focusShowBuffs", "focusShowDebuffs", "focusCastBar",
+		"partyShowBuffs", "partyShowDebuffs",
+		"desaturateOtherDebuffs", "highlightDispellableDebuffs", "highlightExpiringAuras",
+	},
+	group = {
+		"showRaidFrames", "hidePartyInRaid", "hideCompactRaidManager", "enableClickCast",
+	},
+	colors = {
+		"healthColorMode", "healthColorPlayerOnly",
+	},
+	threat = {
+		"enableThreatHighlight", "threatStyle", "showTargetThreat", "targetThreatRawPct",
+	},
+}
+
+local configFrame
+
+if StaticPopupDialogs then
+	StaticPopupDialogs["OUF_BRUN_RESET_ALL"] = {
+		text = "|cffff8000oUF_Brun|r\n\nReset ALL settings across every tab, custom class colors, and frame positions back to defaults?",
+		button1 = YES or "Yes",
+		button2 = CANCEL or "Cancel",
+		OnAccept = function()
+			if InCombatLockdown() or not ns.ResetDefaults then return end
+			local freshOpts = ns.ResetDefaults()
+			if configFrame and configFrame.SyncAllControls then
+				configFrame.SyncAllControls(freshOpts, true)
+			end
+		end,
+		timeout = 0,
+		whileDead = true,
+		hideOnEscape = true,
+		preferredIndex = 3,
+	}
+end
 
 local FLAT_BACKDROP = {
 	bgFile = "Interface\\Buttons\\WHITE8X8",
@@ -86,7 +152,6 @@ local FLAT_BACKDROP = {
 	edgeSize = 1,
 }
 
-local configFrame
 local moverBtnRef
 local testBtnRef
 
@@ -548,17 +613,53 @@ function ns.ToggleConfigGUI()
 		return btn
 	end
 
-	-- Build 4 category pages
+	local function OpenColorPicker(r, g, b, onChanged, onCancel)
+		if ColorPickerFrame.SetupColorPickerAndShow then
+			ColorPickerFrame:SetupColorPickerAndShow({
+				swatchFunc = function()
+					local nr, ng, nb = ColorPickerFrame:GetColorRGB()
+					onChanged(nr, ng, nb)
+				end,
+				cancelFunc = function()
+					onCancel()
+				end,
+				r = r,
+				g = g,
+				b = b,
+				hasOpacity = false,
+			})
+		else
+			ColorPickerFrame:Hide()
+			ColorPickerFrame.hasOpacity = false
+			ColorPickerFrame.previousValues = { r, g, b }
+			ColorPickerFrame.func = function()
+				local nr, ng, nb = ColorPickerFrame:GetColorRGB()
+				onChanged(nr, ng, nb)
+			end
+			ColorPickerFrame.cancelFunc = function()
+				onCancel()
+			end
+			ColorPickerFrame:SetColorRGB(r, g, b)
+			ColorPickerFrame:Show()
+		end
+	end
+
+	-- Build 6 category pages
 	local tabs = {
 		{ id = "general", label = "General" },
 		{ id = "frames", label = "Unit Frames" },
 		{ id = "auras", label = "Auras & Casts" },
 		{ id = "group", label = "Party & Raid" },
+		{ id = "colors", label = "Colors" },
+		{ id = "threat", label = "Aggro & Threat" },
 	}
 	local pages = {}
 	local tabButtons = {}
+	local tabLabels = {}
+	local activeTabId = "general"
 
 	local function SelectTab(tabId)
+		activeTabId = tabId
 		for id, page in pairs(pages) do
 			page:SetShown(id == tabId)
 		end
@@ -577,6 +678,7 @@ function ns.ToggleConfigGUI()
 	end
 
 	for i, tab in ipairs(tabs) do
+		tabLabels[tab.id] = tab.label
 		local page = CreateFrame("Frame", nil, contentArea)
 		page:SetAllPoints()
 		page:Hide()
@@ -628,19 +730,18 @@ function ns.ToggleConfigGUI()
 	-- Page 1: General
 	do
 		local p = pages.general
-		local card1 = CreateCard(p, "Names & Visuals", 158, 12)
+		local card1 = CreateCard(p, "Names & Visuals", 134, 12)
 		local generalVisuals = {
 			{ key = "firstNameOnly", label = "First Name Only (hide Forever surnames)", tip = "Show only the first name on player unit frames." },
 			{ key = "shortRaceNames", label = "Shorten Long Race & Creature Names", tip = "Shorten compound race names (e.g. Windshaper Skyborne -> Skyborne)." },
 			{ key = "hideSelfInfo", label = "Hide Player Name & Level at Max Level", tip = "Keep your player power bar uncluttered at max level." },
 			{ key = "enableHealthPrediction", label = "Incoming Heals & Absorb Shields", tip = "Show incoming heal predictions and absorb overlays on health bars." },
-			{ key = "enableThreatHighlight", label = "Aggro / Threat Backdrop Highlight", tip = "Highlight unit frame borders when a unit holds aggro or high threat." },
 		}
 		for i, def in ipairs(generalVisuals) do
 			CreateToggleRow(card1, def, i)
 		end
 
-		local card2 = CreateCard(p, "Behavior & Interface", 110, 182)
+		local card2 = CreateCard(p, "Behavior & Interface", 110, 158)
 		local generalBehavior = {
 			{ key = "enableFader", label = "Fade Player & Pet Out of Combat", tip = "Smoothly fade Player and Pet frames when idle with no target." },
 			{ key = "removeBuffs", label = "Hide Default Blizzard Buff Frame", tip = "Disable Blizzard's top-right buff and weapon enchant frames." },
@@ -792,6 +893,385 @@ function ns.ToggleConfigGUI()
 		bindNote:SetText("M1: Quick Heal   |   M2: Big / HoT Heal   |   M3: Dispel   |   Shift-Click: Target")
 	end
 
+	-- Page 5: Colors
+	local RefreshColorUI
+	do
+		local p = pages.colors
+		local card1 = CreateCard(p, "Health Bar Color Mode", 104, 10)
+
+		local liveBadge = card1:CreateFontString(nil, "OVERLAY")
+		liveBadge:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		liveBadge:SetPoint("TOPRIGHT", -12, -11)
+		liveBadge:SetTextColor(0.35, 0.78, 0.45)
+		liveBadge:SetText("LIVE")
+
+		local modeButtons = {}
+		local modeDefs = {
+			{ id = "class", label = "Class Colors", tip = "Color player & friendly unit health bars using standard WoW class colors." },
+			{ id = "blizzard", label = "Blizzard Green", tip = "Use classic Blizzard green on friendly/player health bars (no orange Druid vs aggro red clash)." },
+			{ id = "custom", label = "Custom Class", tip = "Use your customized class colors from the grid below." },
+		}
+
+		local modeDesc = card1:CreateFontString(nil, "OVERLAY")
+		modeDesc:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+		modeDesc:SetPoint("TOPLEFT", 14, -63)
+		modeDesc:SetPoint("TOPRIGHT", -12, -63)
+		modeDesc:SetJustifyH("LEFT")
+		modeDesc:SetTextColor(0.66, 0.66, 0.72)
+
+		local MODE_DESC_TEXT = {
+			class = "Standard WoW class colors on players; reaction colors on NPCs.",
+			blizzard = "Classic Blizzard green on health bars instead of class colors.",
+			custom = "Custom per-class colors from the palette below.",
+		}
+
+		for idx, def in ipairs(modeDefs) do
+			local btn = CreateActionButton(card1, def.label, 122, 26, function()
+				ns.GetOptionsDB().healthColorMode = def.id
+				ns.ApplySavedOptions()
+				RefreshColorUI()
+			end)
+			if idx == 1 then
+				btn:SetPoint("TOPLEFT", 12, -33)
+			else
+				btn:SetPoint("LEFT", modeButtons[idx - 1], "RIGHT", 10, 0)
+			end
+			btn:HookScript("OnEnter", function(self)
+				GameTooltip:SetOwner(self, "ANCHOR_TOP")
+				GameTooltip:AddLine(def.label, 1, 0.82, 0)
+				GameTooltip:AddLine(def.tip, 0.85, 0.85, 0.9, true)
+				GameTooltip:AddLine("Applies immediately without reloading.", 0.35, 0.85, 0.45)
+				GameTooltip:Show()
+			end)
+			btn:HookScript("OnLeave", function()
+				GameTooltip:Hide()
+			end)
+			btn.modeId = def.id
+			modeButtons[idx] = btn
+		end
+
+		local playerOnlyRow = CreateToggleRow(card1, {
+			key = "healthColorPlayerOnly",
+			label = "Keep Class Colors on Other Units (Player Only)",
+			tip = "When enabled, Blizzard Green or Custom Class color applies only to your Player frame; Target, Party & Raid keep default class colors.",
+		}, 3)
+		playerOnlyRow:HookScript("OnClick", function()
+			if RefreshColorUI then RefreshColorUI() end
+		end)
+
+		local card2 = CreateCard(p, "Custom Class Colors", 222, 122)
+		local resetColorsBtn = CreateActionButton(card2, "Reset Colors", 86, 18, function()
+			table.wipe(ns.GetClassColorsDB())
+			ns.ApplySavedOptions()
+			RefreshColorUI()
+		end)
+		resetColorsBtn:SetPoint("TOPRIGHT", -10, -5)
+		resetColorsBtn.label:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		resetColorsBtn:HookScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_TOP")
+			GameTooltip:AddLine("Reset Custom Class Colors", 1, 0.82, 0)
+			GameTooltip:AddLine("Restore all classes back to default WoW class colors.", 0.85, 0.85, 0.9, true)
+			GameTooltip:Show()
+		end)
+		resetColorsBtn:HookScript("OnLeave", function()
+			GameTooltip:Hide()
+		end)
+
+		local baseOrder = CLASS_SORT_ORDER or {
+			"WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT",
+			"SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER",
+		}
+		local classTokens = {}
+		local seenTokens = {}
+		local colorTable = oUF.colors and oUF.colors.class or {}
+		for _, token in ipairs(baseOrder) do
+			if colorTable[token] then
+				table.insert(classTokens, token)
+				seenTokens[token] = true
+			end
+		end
+		for token in pairs(colorTable) do
+			if type(token) == "string" and not seenTokens[token] then
+				table.insert(classTokens, token)
+			end
+		end
+
+		local classRows = {}
+		for idx, token in ipairs(classTokens) do
+			local col = (idx - 1) % 2
+			local row = math.floor((idx - 1) / 2)
+			local x = (col == 0) and 12 or 210
+			local y = 33 + row * 25
+
+			local item = CreateFrame("Button", nil, card2)
+			item:SetSize(188, 22)
+			item:SetPoint("TOPLEFT", x, -y)
+
+			local hoverBg = item:CreateTexture(nil, "BACKGROUND")
+			hoverBg:SetAllPoints()
+			hoverBg:SetColorTexture(1, 1, 1, 0.05)
+			hoverBg:Hide()
+
+			local swatchFrame = CreateFrame("Frame", nil, item, BackdropTemplateMixin and "BackdropTemplate" or nil)
+			swatchFrame:SetSize(16, 16)
+			swatchFrame:SetPoint("LEFT", 4, 0)
+			StyleFlatBox(swatchFrame, 0.05, 0.05, 0.07, 1, 0.34, 0.34, 0.40, 1)
+
+			local swatchTex = swatchFrame:CreateTexture(nil, "ARTWORK")
+			swatchTex:SetPoint("TOPLEFT", 2, -2)
+			swatchTex:SetPoint("BOTTOMRIGHT", -2, 2)
+			swatchTex:SetTexture(TEXTURE)
+
+			local classLabel = item:CreateFontString(nil, "OVERLAY")
+			classLabel:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+			classLabel:SetPoint("LEFT", swatchFrame, "RIGHT", 8, 0)
+			classLabel:SetText(LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[token] or token)
+			classLabel:SetTextColor(0.92, 0.92, 0.95)
+
+			item:SetScript("OnEnter", function(self)
+				hoverBg:Show()
+				local mode = ns.GetOptionsDB().healthColorMode or "class"
+				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+				GameTooltip:AddLine(classLabel:GetText(), 1, 0.82, 0)
+				if mode ~= "custom" then
+					GameTooltip:AddLine("Click to pick a custom color (switches mode to Custom Class).", 0.85, 0.85, 0.9, true)
+				else
+					GameTooltip:AddLine("Click to change this class color.", 0.85, 0.85, 0.9, true)
+				end
+				GameTooltip:Show()
+			end)
+			item:SetScript("OnLeave", function()
+				hoverBg:Hide()
+				GameTooltip:Hide()
+			end)
+			item:SetScript("OnClick", function()
+				local opts = ns.GetOptionsDB()
+				local classDB = ns.GetClassColorsDB()
+				local prevMode = opts.healthColorMode or "class"
+				local prevEntry = classDB[token]
+				local prevColor = prevEntry and { prevEntry.r or prevEntry[1], prevEntry.g or prevEntry[2], prevEntry.b or prevEntry[3] } or nil
+				local startR, startG, startB
+				if prevColor and prevColor[1] and prevColor[2] and prevColor[3] then
+					startR, startG, startB = prevColor[1], prevColor[2], prevColor[3]
+				elseif ns.GetDefaultClassColor then
+					startR, startG, startB = ns.GetDefaultClassColor(token)
+				else
+					startR, startG, startB = 0.5, 0.5, 0.5
+				end
+
+				OpenColorPicker(startR, startG, startB, function(nr, ng, nb)
+					opts.healthColorMode = "custom"
+					classDB[token] = { r = nr, g = ng, b = nb }
+					ns.ApplySavedOptions()
+					RefreshColorUI()
+				end, function()
+					opts.healthColorMode = prevMode
+					if prevColor then
+						classDB[token] = { r = prevColor[1], g = prevColor[2], b = prevColor[3] }
+					else
+						classDB[token] = nil
+					end
+					ns.ApplySavedOptions()
+					RefreshColorUI()
+				end)
+			end)
+
+			classRows[idx] = {
+				token = token,
+				swatchFrame = swatchFrame,
+				swatchTex = swatchTex,
+				label = classLabel,
+			}
+		end
+
+		RefreshColorUI = function()
+			local opts = ns.GetOptionsDB()
+			local mode = (opts.healthColorMode == "blizzard" or opts.healthColorMode == "custom") and opts.healthColorMode or "class"
+			for _, btn in ipairs(modeButtons) do
+				btn:SetActive(btn.modeId == mode)
+			end
+			local desc = MODE_DESC_TEXT[mode] or MODE_DESC_TEXT.class
+			if opts.healthColorPlayerOnly and mode ~= "class" then
+				desc = desc .. " (Player Only)"
+			end
+			modeDesc:SetText(desc)
+
+			local classDB = ns.GetClassColorsDB()
+			local isCustom = (mode == "custom")
+			for _, row in ipairs(classRows) do
+				local c = classDB[row.token]
+				local r, g, b
+				if isCustom and type(c) == "table" and (c.r or c[1]) then
+					r, g, b = c.r or c[1], c.g or c[2], c.b or c[3]
+				elseif ns.GetDefaultClassColor then
+					r, g, b = ns.GetDefaultClassColor(row.token)
+				else
+					r, g, b = 0.5, 0.5, 0.5
+				end
+				row.swatchTex:SetVertexColor(r, g, b, 1)
+				row.swatchFrame:SetAlpha(isCustom and 1 or 0.65)
+				row.label:SetAlpha(isCustom and 1 or 0.65)
+			end
+		end
+	end
+
+	-- Page 6: Aggro & Threat
+	local RefreshThreatUI
+	do
+		local p = pages.threat
+		local card1 = CreateCard(p, "Unit Frame Aggro Indicator", 132, 12)
+		local threatToggleRow = CreateToggleRow(card1, {
+			key = "enableThreatHighlight",
+			label = "Enable Aggro / Threat Indicator",
+			tip = "Highlight unit frames (Player, Target, Party, Raid) when a unit holds aggro or high threat.",
+		}, 1)
+
+		local styleButtons = {}
+		local styleDefs = {
+			{ id = "backdrop", label = "Border", width = 66, tip = "Color the frame's 2px outer border by threat level (no bar bleed)." },
+			{ id = "glow", label = "Outer Glow", width = 86, tip = "Soft feathered outer glow radiating around the frame (no bar bleed)." },
+			{ id = "tint", label = "Tint", width = 54, tip = "Classic red/orange/yellow backdrop tint glowing behind Health & Power bars." },
+			{ id = "badge", label = "Badge", width = 62, tip = "Display an AGGRO / HIGH / THREAT pill above standard frames (or [!] on compact frames)." },
+			{ id = "both", label = "Glow + Badge", width = 95, tip = "Soft feathered outer glow radiating around the frame + AGGRO / [!] badge." },
+		}
+
+		local styleDesc = card1:CreateFontString(nil, "OVERLAY")
+		styleDesc:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+		styleDesc:SetPoint("TOPLEFT", 14, -96)
+		styleDesc:SetPoint("TOPRIGHT", -12, -96)
+		styleDesc:SetJustifyH("LEFT")
+		styleDesc:SetTextColor(0.66, 0.66, 0.72)
+
+		local STYLE_DESC_TEXT = {
+			backdrop = "Style: Hollow 2px outer frame border (yellow / orange / red).",
+			glow = "Style: Soft feathered outer glow radiating around the frame.",
+			tint = "Style: Classic backdrop tint glowing through Health & Power bars.",
+			badge = "Style: Non-overlapping AGGRO pill above the frame (no border glow).",
+			both = "Style: Soft feathered outer glow + above-frame AGGRO pill.",
+		}
+
+		for idx, def in ipairs(styleDefs) do
+			local btn = CreateActionButton(card1, def.label, def.width, 24, function()
+				if not ns.GetOptionsDB().enableThreatHighlight then return end
+				ns.GetOptionsDB().threatStyle = def.id
+				ns.ApplySavedOptions()
+				RefreshThreatUI()
+			end)
+			if idx == 1 then
+				btn:SetPoint("TOPLEFT", 12, -62)
+			else
+				btn:SetPoint("LEFT", styleButtons[idx - 1], "RIGHT", 6, 0)
+			end
+			btn:HookScript("OnEnter", function(self)
+				GameTooltip:SetOwner(self, "ANCHOR_TOP")
+				GameTooltip:AddLine(def.label, 1, 0.82, 0)
+				GameTooltip:AddLine(def.tip, 0.85, 0.85, 0.9, true)
+				if not ns.GetOptionsDB().enableThreatHighlight then
+					GameTooltip:AddLine("Requires 'Enable Aggro / Threat Indicator' to be enabled.", 1, 0.45, 0.35, true)
+				else
+					GameTooltip:AddLine("Applies immediately without reloading.", 0.35, 0.85, 0.45)
+				end
+				GameTooltip:Show()
+			end)
+			btn:HookScript("OnLeave", function()
+				GameTooltip:Hide()
+			end)
+			btn.styleId = def.id
+			styleButtons[idx] = btn
+		end
+
+		threatToggleRow:HookScript("OnClick", function()
+			if RefreshThreatUI then RefreshThreatUI() end
+		end)
+
+		local card2 = CreateCard(p, "Target Threat Percentage", 114, 156)
+		CreateToggleRow(card2, {
+			key = "showTargetThreat",
+			label = "Show Threat % Bar on Target Frame",
+			tip = "Display a compact threat % pill above Target's top-left corner in combat.",
+		}, 1)
+		CreateToggleRow(card2, {
+			key = "targetThreatRawPct",
+			label = "Show Raw Pull Threshold % (110% / 130%)",
+			tip = "Use Blizzard's raw aggro threshold percentage (110% melee / 130% ranged) instead of scaled 100% tank cap.",
+			indent = true,
+			dependsOn = "showTargetThreat",
+			dependsLabel = "Show Threat % Bar on Target Frame",
+		}, 2)
+
+		local threatNote = card2:CreateFontString(nil, "OVERLAY")
+		threatNote:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+		threatNote:SetPoint("TOPLEFT", 16, -86)
+		threatNote:SetPoint("TOPRIGHT", -14, -86)
+		threatNote:SetJustifyH("LEFT")
+		threatNote:SetTextColor(0.62, 0.62, 0.68)
+		threatNote:SetText("Displays above Target's top-left corner while on an enemy's threat table.")
+
+		RefreshThreatUI = function()
+			local opts = ns.GetOptionsDB()
+			local enabled = (opts.enableThreatHighlight ~= false)
+			local style = (opts.threatStyle == "glow" or opts.threatStyle == "tint" or opts.threatStyle == "badge" or opts.threatStyle == "both") and opts.threatStyle or "backdrop"
+			for _, btn in ipairs(styleButtons) do
+				btn:SetActive(enabled and btn.styleId == style)
+				btn:SetAlpha(enabled and 1 or 0.45)
+			end
+			styleDesc:SetText(STYLE_DESC_TEXT[style] or STYLE_DESC_TEXT.backdrop)
+			styleDesc:SetAlpha(enabled and 1 or 0.45)
+		end
+	end
+
+	local function SyncAllControls(curOpts, markReload)
+		for k, cb in pairs(checkboxes) do
+			cb:SetChecked(curOpts[k])
+		end
+		RefreshDependencies()
+		if RefreshColorUI then RefreshColorUI() end
+		if RefreshThreatUI then RefreshThreatUI() end
+		if markReload then
+			reloadNeeded = true
+		end
+		UpdateReloadHint()
+	end
+	f.SyncAllControls = SyncAllControls
+
+	local function ResetActiveTab()
+		local keys = TAB_OPTION_KEYS[activeTabId]
+		if not keys then return end
+		local curOpts = ns.GetOptionsDB()
+		local needsReload = false
+		for _, k in ipairs(keys) do
+			if curOpts[k] ~= DEFAULT_OPTIONS[k] and not LIVE_OPTIONS[k] then
+				needsReload = true
+			end
+			curOpts[k] = DEFAULT_OPTIONS[k]
+		end
+		if activeTabId == "colors" and ns.GetClassColorsDB then
+			table.wipe(ns.GetClassColorsDB())
+		end
+		if ns.ApplySavedOptions then
+			ns.ApplySavedOptions()
+		end
+		if activeTabId == "general" and oUF and oUF.objects then
+			for _, obj in ipairs(oUF.objects) do
+				if obj.UpdateTags then obj:UpdateTags() end
+			end
+		end
+		SyncAllControls(curOpts, needsReload)
+	end
+
+	local resetTabBtn = CreateActionButton(headerBar, "Reset Tab", 86, 24, ResetActiveTab)
+	resetTabBtn:SetPoint("RIGHT", closeBtn, "LEFT", -10, 0)
+	resetTabBtn:HookScript("OnEnter", function(self)
+		local tabName = tabLabels[activeTabId] or activeTabId
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+		GameTooltip:AddLine("Reset '" .. tabName .. "' Tab", 1, 0.82, 0)
+		GameTooltip:AddLine("Restores only the settings on the active tab back to defaults.", 0.85, 0.85, 0.9, true)
+		GameTooltip:Show()
+	end)
+	resetTabBtn:HookScript("OnLeave", function()
+		GameTooltip:Hide()
+	end)
+
 	-- Footer action buttons (4 equal-width 128px buttons, zero text overflow)
 	local moverBtn = CreateActionButton(footerBar, "Unlock Movers", 128, 26, function()
 		if ns.ToggleMovers then
@@ -813,32 +1293,35 @@ function ns.ToggleConfigGUI()
 
 	local resetBtn = CreateActionButton(footerBar, "Reset Defaults", 128, 26, function()
 		if InCombatLockdown() or not ns.ResetDefaults then return end
-		local freshOpts = ns.ResetDefaults()
-		for k, cb in pairs(checkboxes) do
-			cb:SetChecked(freshOpts[k])
+		if StaticPopup_Show then
+			local popup = StaticPopup_Show("OUF_BRUN_RESET_ALL")
+			if popup then popup:Raise() end
+		else
+			local freshOpts = ns.ResetDefaults()
+			SyncAllControls(freshOpts, true)
 		end
-		RefreshDependencies()
-		reloadNeeded = true
-		UpdateReloadHint()
 	end)
 	resetBtn:SetPoint("LEFT", testBtn, "RIGHT", 12, 0)
+	resetBtn:HookScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:AddLine("Reset All Defaults", 1, 0.82, 0)
+		GameTooltip:AddLine("Asks for confirmation before resetting every tab, custom class colors, and frame positions.", 0.85, 0.85, 0.9, true)
+		GameTooltip:Show()
+	end)
+	resetBtn:HookScript("OnLeave", function()
+		GameTooltip:Hide()
+	end)
 
 	reloadBtn = CreateActionButton(footerBar, "Reload UI", 128, 26, ReloadUI)
 	reloadBtn:SetPoint("RIGHT", -15, 0)
 
 	SelectTab("general")
-	RefreshDependencies()
-	UpdateReloadHint()
+	SyncAllControls(ns.GetOptionsDB(), false)
 
 	f:SetScript("OnShow", function()
-		local curOpts = ns.GetOptionsDB()
-		for k, cb in pairs(checkboxes) do
-			cb:SetChecked(curOpts[k])
-		end
-		RefreshDependencies()
+		SyncAllControls(ns.GetOptionsDB(), false)
 		ns.UpdateMoverBtnState()
 		ns.UpdateTestBtnState()
-		UpdateReloadHint()
 	end)
 
 	configFrame = f

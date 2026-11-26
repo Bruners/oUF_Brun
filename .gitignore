@@ -11,3 +11,6 @@ Desktop.ini
 *.tmp
 *.orig
 
+# Local screenshots / images
+images/
+

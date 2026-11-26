@@ -111,8 +111,9 @@ local function CreateRaidStyle(self)
 	hp:SetAlpha(0.8)
 	hp.colorDisconnected = true
 	hp.colorTapping = true
-	hp.colorClass = true
+	hp.colorClass = (ns.UseClassHealthColor == nil) or ns.UseClassHealthColor()
 	hp.colorReaction = true
+	hp.colorHealth = true
 	hp.smoothing = ns.smoothInterpolation
 	hp.PostUpdateColor = ns.PostUpdateBarColor
 	self.Health = hp
@@ -121,14 +122,12 @@ local function CreateRaidStyle(self)
 		ns.CreateHealthPrediction(self)
 	end
 
-	if ns.IsThreatHighlightEnabled() then
-		self.ThreatIndicator = {
-			IsObjectType = nop,
-			Show = nop,
-			Hide = nop,
-			PostUpdate = ns.PostUpdateThreat,
-		}
-	end
+	self.ThreatIndicator = {
+		IsObjectType = nop,
+		Show = nop,
+		Hide = nop,
+		PostUpdate = ns.PostUpdateThreat,
+	}
 
 	local hpbg = hp:CreateTexture(nil, "BORDER")
 	hpbg:SetAllPoints(self)
@@ -292,6 +291,19 @@ local TEST_DUMMY_ROSTER = {
 
 local testRaidDummies = {}
 
+function ns.RefreshRaidTestDummyColors()
+	if not ns.GetHealthBarColorForClass then return end
+	for _, dummy in pairs(testRaidDummies) do
+		if dummy.hp and dummy.classToken then
+			local r, g, b = ns.GetHealthBarColorForClass(dummy.classToken)
+			dummy.hp:SetStatusBarColor(r, g, b, 0.8)
+			if dummy.hpbg then
+				dummy.hpbg:SetVertexColor(r, g, b, 0.3)
+			end
+		end
+	end
+end
+
 local function BuildRaidTestDummy(parent, groupIdx, memberIdx)
 	local slotIndex = (groupIdx - 1) * 5 + memberIdx
 	local sample = TEST_DUMMY_ROSTER[((slotIndex - 1) % #TEST_DUMMY_ROSTER) + 1]
@@ -308,9 +320,15 @@ local function BuildRaidTestDummy(parent, groupIdx, memberIdx)
 	local yOffset = -row * rowOffset - (memberIdx - 1) * (raidHeight + 3)
 	dummy:SetPoint("TOPLEFT", parent, "TOPLEFT", xOffset, yOffset)
 
-	local clsColor = (CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS[classToken])
-		or (RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken])
-		or { r = 0.5, g = 0.5, b = 0.5 }
+	local cr, cg, cb
+	if ns.GetHealthBarColorForClass then
+		cr, cg, cb = ns.GetHealthBarColorForClass(classToken)
+	else
+		local clsColor = (CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS[classToken])
+			or (RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken])
+			or { r = 0.5, g = 0.5, b = 0.5 }
+		cr, cg, cb = clsColor.r, clsColor.g, clsColor.b
+	end
 	local pwrColor = oUF.colors.power[powerType] or oUF.colors.power.MANA
 
 	local hp = CreateFrame("StatusBar", nil, dummy)
@@ -320,12 +338,16 @@ local function BuildRaidTestDummy(parent, groupIdx, memberIdx)
 	hp:SetStatusBarTexture(TEXTURE)
 	hp:SetMinMaxValues(0, 1)
 	hp:SetValue(hpPct)
-	hp:SetStatusBarColor(clsColor.r, clsColor.g, clsColor.b, 0.8)
+	hp:SetStatusBarColor(cr, cg, cb, 0.8)
 
 	local hpbg = hp:CreateTexture(nil, "BORDER")
 	hpbg:SetAllPoints(dummy)
 	hpbg:SetTexture(TEXTURE)
-	hpbg:SetVertexColor(clsColor.r, clsColor.g, clsColor.b, 0.3)
+	hpbg:SetVertexColor(cr, cg, cb, 0.3)
+
+	dummy.classToken = classToken
+	dummy.hp = hp
+	dummy.hpbg = hpbg
 
 	local pp = CreateFrame("StatusBar", nil, dummy)
 	pp:SetPoint("TOPLEFT", hp, "BOTTOMLEFT", 0, -1)
