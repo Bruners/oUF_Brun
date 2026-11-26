@@ -9,8 +9,12 @@ assert(oUF, "oUF_Brun requires oUF to be loaded.")
 
 local nop = _G.nop or function() end
 
-local raidWidth = ns.raidWidth or 85
-local raidHeight = ns.raidHeight or 24
+local function GetRaidDims()
+	local rW = (ns.GetSize and ns.GetSize("raidWidth")) or ns.raidWidth or 85
+	local rH = (ns.GetSize and ns.GetSize("raidHeight")) or ns.raidHeight or 24
+	return rW, rH
+end
+
 local FONT = ns.GetFontPath and ns.GetFontPath() or ns.FONT
 local TEXTURE = ns.GetStatusBarTexture and ns.GetStatusBarTexture() or ns.TEXTURE
 local HIGHLIGHT = ns.HIGHLIGHT
@@ -96,11 +100,12 @@ local function CreateRaidStyle(self)
 	self:RegisterForClicks("AnyUp")
 	ns.RegisterClickCastFrame(self)
 
+	local rW, rH = GetRaidDims()
 	ns.ApplyBackdrop(self)
-	self:SetSize(raidWidth, raidHeight)
+	self:SetSize(rW, rH)
 	self.Range = {
 		insideAlpha = 1,
-		outsideAlpha = 0.45,
+		outsideAlpha = ns.GetRangeAlpha and ns.GetRangeAlpha() or 0.45,
 	}
 
 	local hp = CreateFrame("StatusBar", nil, self)
@@ -108,7 +113,7 @@ local function CreateRaidStyle(self)
 	hp:SetPoint("TOPLEFT")
 	hp:SetStatusBarTexture(ns.GetStatusBarTexture and ns.GetStatusBarTexture() or TEXTURE)
 	if ns.TrackStatusBar then ns.TrackStatusBar(hp) end
-	hp:SetHeight(20)
+	hp:SetHeight(math.max(10, rH - 4))
 	hp:SetAlpha(ns.GetBarAlpha and ns.GetBarAlpha() or 0.8)
 	if ns.TrackHealthBar then ns.TrackHealthBar(hp) end
 	hp.colorDisconnected = true
@@ -236,6 +241,7 @@ local function CreateRaidStyle(self)
 			frameLevel = hp:GetFrameLevel() + 4,
 		})
 		debuffs:SetPoint("CENTER", hp, "CENTER", 0, 0)
+		self.RaidDebuffs = debuffs
 	end
 end
 
@@ -316,15 +322,16 @@ local function BuildRaidTestDummy(parent, groupIdx, memberIdx)
 	local sample = TEST_DUMMY_ROSTER[((slotIndex - 1) % #TEST_DUMMY_ROSTER) + 1]
 	local nameTxt, classToken, hpPct, ppPct, powerType, isOOR, statusTxt = unpack(sample)
 
+	local rW, rH = GetRaidDims()
 	local dummy = CreateFrame("Frame", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-	dummy:SetSize(raidWidth, raidHeight)
+	dummy:SetSize(rW, rH)
 	ns.ApplyBackdrop(dummy)
 
 	local col = (groupIdx - 1) % 5
 	local row = math.floor((groupIdx - 1) / 5)
-	local rowOffset = raidHeight * 5 + 3 * 4 + 12
-	local xOffset = col * (raidWidth + 5)
-	local yOffset = -row * rowOffset - (memberIdx - 1) * (raidHeight + 3)
+	local rowOffset = rH * 5 + 3 * 4 + 12
+	local xOffset = col * (rW + 5)
+	local yOffset = -row * rowOffset - (memberIdx - 1) * (rH + 3)
 	dummy:SetPoint("TOPLEFT", parent, "TOPLEFT", xOffset, yOffset)
 
 	local cr, cg, cb
@@ -341,7 +348,7 @@ local function BuildRaidTestDummy(parent, groupIdx, memberIdx)
 	local hp = CreateFrame("StatusBar", nil, dummy)
 	hp:SetPoint("TOPLEFT")
 	hp:SetPoint("TOPRIGHT")
-	hp:SetHeight(20)
+	hp:SetHeight(math.max(10, rH - 4))
 	hp:SetStatusBarTexture(ns.GetStatusBarTexture and ns.GetStatusBarTexture() or TEXTURE)
 	if ns.TrackStatusBar then ns.TrackStatusBar(hp) end
 	hp:SetMinMaxValues(0, 1)
@@ -359,12 +366,30 @@ local function BuildRaidTestDummy(parent, groupIdx, memberIdx)
 	dummy.hpbg = hpbg
 	if groupIdx == 1 and memberIdx == 2 then
 		dummy.testThreatStatus = 3
+		dummy.testDebuffCount = 2
 	elseif groupIdx == 1 and memberIdx == 3 then
 		dummy.testThreatStatus = 2
+		dummy.testDebuffCount = 0
+	elseif groupIdx == 1 and memberIdx == 4 then
+		dummy.testThreatStatus = 0
+		dummy.testDebuffCount = 1
 	elseif groupIdx == 2 and memberIdx == 2 then
 		dummy.testThreatStatus = 1
+		dummy.testDebuffCount = 1
+	elseif groupIdx == 3 and memberIdx == 2 then
+		dummy.testThreatStatus = 0
+		dummy.testDebuffCount = 2
 	else
 		dummy.testThreatStatus = 0
+		dummy.testDebuffCount = 0
+	end
+
+	if dummy.testDebuffCount > 0 then
+		local rDebuffs = CreateFrame("Frame", nil, dummy)
+		rDebuffs:SetSize(30, 14)
+		rDebuffs:SetPoint("CENTER", hp, "CENTER", 0, 0)
+		rDebuffs:SetFrameLevel(hp:GetFrameLevel() + 4)
+		dummy.RaidDebuffs = rDebuffs
 	end
 
 	local pp = CreateFrame("StatusBar", nil, dummy)
@@ -406,7 +431,8 @@ local function BuildRaidTestDummy(parent, groupIdx, memberIdx)
 	nameStr:SetText(nameTxt:sub(1, 4))
 	nameStr:SetTextColor(1, 1, 1)
 
-	dummy:SetAlpha(isOOR and 0.45 or 1)
+	dummy.isOOR = isOOR
+	dummy:SetAlpha(isOOR and (ns.GetRangeAlpha and ns.GetRangeAlpha() or 0.45) or 1)
 	dummy:EnableMouse(true)
 	dummy:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -419,12 +445,30 @@ local function BuildRaidTestDummy(parent, groupIdx, memberIdx)
 	return dummy
 end
 
+function ns.RefreshRaidTestDummyRange(alpha)
+	local oorAlpha = alpha or (ns.GetRangeAlpha and ns.GetRangeAlpha()) or 0.45
+	for _, dummy in pairs(testRaidDummies) do
+		dummy:SetAlpha(dummy.isOOR and oorAlpha or 1)
+	end
+end
+
 function ns.RefreshRaidTestDummyThreat()
 	if not ns.PostUpdateThreat then return end
 	local active = ns.IsTestModeActive and ns.IsTestModeActive() or false
 	for _, dummy in pairs(testRaidDummies) do
 		local status = (active and dummy:IsShown()) and (dummy.testThreatStatus or 0) or 0
 		ns.PostUpdateThreat({ __owner = dummy }, nil, status)
+	end
+end
+
+function ns.RefreshRaidTestDummyDebuffs()
+	if not ns.RenderTestDebuffIcons then return end
+	local active = ns.IsTestModeActive and ns.IsTestModeActive() or false
+	for _, dummy in pairs(testRaidDummies) do
+		if dummy.RaidDebuffs then
+			local count = (active and dummy:IsShown() and ns.IsDispelHighlightEnabled()) and (dummy.testDebuffCount or 0) or 0
+			ns.RenderTestDebuffIcons(dummy.RaidDebuffs, count, { size = 14, spacing = 2, growthX = "RIGHT", centered = true })
+		end
 	end
 end
 
@@ -476,6 +520,7 @@ function ns.ToggleRaidTestFrames(testModeActive)
 	end
 
 	ns.RefreshRaidTestDummyThreat()
+	ns.RefreshRaidTestDummyDebuffs()
 end
 
 --===================================================--
@@ -485,14 +530,15 @@ end
 function ns.SpawnRaidFrames(self)
 	if not ns.IsRaidFramesEnabled() then return end
 
+	local rW, rH = GetRaidDims()
 	ns.UpdateBlizzardRaidFramesVisibility()
 	local raidAnchor = ns.CreatePositionAnchor(
 		"Raid",
-		raidWidth * 5 + 5 * 4,
-		(raidHeight * 5 + 3 * 4) * 2 + 12,
+		rW * 5 + 5 * 4,
+		(rH * 5 + 3 * 4) * 2 + 12,
 		ns.defaultRaidPoint
 	)
-	local rowOffset = raidHeight * 5 + 3 * 4 + 12
+	local rowOffset = rH * 5 + 3 * 4 + 12
 
 	self:SetActiveStyle("BrunRaid")
 	for i = 1, 8 do
@@ -504,11 +550,11 @@ function ns.SpawnRaidFrames(self)
 			"yOffset", -3,
 			"groupFilter", tostring(i),
 			"sortMethod", "INDEX",
-			"oUF-initialConfigFunction", string.format("self:SetWidth(%d) self:SetHeight(%d)", raidWidth, raidHeight)
+			"oUF-initialConfigFunction", string.format("self:SetWidth(%d) self:SetHeight(%d)", rW, rH)
 		)
 		local col = (i - 1) % 5
 		local row = math.floor((i - 1) / 5)
-		header:SetPoint("TOPLEFT", raidAnchor, "TOPLEFT", col * (raidWidth + 5), -row * rowOffset)
+		header:SetPoint("TOPLEFT", raidAnchor, "TOPLEFT", col * (rW + 5), -row * rowOffset)
 		header:SetVisibility("custom [group:raid] show; hide")
 	end
 	self:SetActiveStyle("Brun")

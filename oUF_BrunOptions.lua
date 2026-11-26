@@ -13,6 +13,7 @@ assert(oUF, "oUF_Brun requires oUF to be loaded.")
 
 local DEFAULT_OPTIONS = {
 	enableFader = true,
+	fadeOutAlpha = 0.35,
 	firstNameOnly = false,
 	shortRaceNames = true,
 	desaturateOtherDebuffs = true,
@@ -23,12 +24,15 @@ local DEFAULT_OPTIONS = {
 	targetThreatRawPct = false,
 	hideSelfInfo = true,
 	hidePartyInRaid = false,
-	partySpacing = 52,
+	partySpacing = 32,
+	partyDebuffPosition = "right",
+	rangeAlpha = 0.45,
 	showRaidFrames = true,
 	enableClickCast = false,
 	showPortraits = false,
 	use2DPortraits = false,
 	showBossFrames = true,
+	bossSpacing = 48,
 	showTargetTarget = true,
 	showTargetTargetTarget = true,
 	enableTotemBar = true,
@@ -38,6 +42,7 @@ local DEFAULT_OPTIONS = {
 	playerCastBar = true,
 	targetCastBar = true,
 	focusCastBar = true,
+	petCastBar = true,
 	playerShowBuffs = true,
 	playerShowDebuffs = true,
 	targetShowBuffs = true,
@@ -46,11 +51,35 @@ local DEFAULT_OPTIONS = {
 	focusShowDebuffs = true,
 	partyShowBuffs = true,
 	partyShowDebuffs = true,
+	petShowAura = true,
+	auraSizeOffset = 0,
 	highlightExpiringAuras = true,
 	highlightDispellableDebuffs = true,
 	enableSwingBar = true,
 	enableClassPower = true,
 	useComboDots = false,
+	playerWidth = 252,
+	playerHeight = 35,
+	targetWidth = 252,
+	targetHeight = 35,
+	partyWidth = 206,
+	partyHeight = 35,
+	raidWidth = 85,
+	raidHeight = 24,
+	focusWidth = 200,
+	focusHeight = 30,
+	totWidth = 167,
+	totHeight = 25,
+	petWidth = 152,
+	petHeight = 15,
+	bossWidth = 206,
+	bossHeight = 35,
+	swingWidth = 180,
+	swingHeight = 10,
+	playerAuraSize = 23,
+	targetAuraSize = 23,
+	focusAuraSize = 20,
+	partyAuraSize = 19,
 	healthColorMode = "class",
 	healthColorPlayerOnly = false,
 	statusBarTexture = "oUF_Brun",
@@ -59,6 +88,7 @@ local DEFAULT_OPTIONS = {
 	fontSizeOffset = 0,
 	barAlpha = 0.8,
 	borderSize = 2,
+	smoothBars = true,
 	showMinimapIcon = true,
 }
 
@@ -214,8 +244,77 @@ end
 
 function ns.GetPartySpacing()
 	local spacing = tonumber(ns.GetOptionsDB().partySpacing)
-	if not spacing then return 62 end
+	if not spacing then return 32 end
 	return math.max(0, math.min(120, math.floor(spacing + 0.5)))
+end
+
+function ns.GetPartyDebuffPosition()
+	return (ns.GetOptionsDB().partyDebuffPosition == "below") and "below" or "right"
+end
+
+function ns.GetFadeOutAlpha()
+	local a = tonumber(ns.GetOptionsDB().fadeOutAlpha)
+	if not a then return 0.35 end
+	return math.max(0.0, math.min(0.90, math.floor(a * 20 + 0.5) / 20))
+end
+
+function ns.GetBossSpacing()
+	local spacing = tonumber(ns.GetOptionsDB().bossSpacing)
+	if not spacing then return 48 end
+	return math.max(0, math.min(120, math.floor(spacing + 0.5)))
+end
+
+function ns.GetRangeAlpha()
+	local a = tonumber(ns.GetOptionsDB().rangeAlpha)
+	if not a then return 0.45 end
+	return math.max(0.20, math.min(0.90, math.floor(a * 20 + 0.5) / 20))
+end
+
+function ns.GetAuraSizeOffset()
+	local off = tonumber(ns.GetOptionsDB().auraSizeOffset)
+	if not off then return 0 end
+	return math.max(-6, math.min(8, math.floor(off + 0.5)))
+end
+
+function ns.GetSmoothBars()
+	return ns.GetOptionsDB().smoothBars ~= false
+end
+
+local SIZE_LIMITS = {
+	playerWidth = { min = 140, max = 420, def = 252 },
+	playerHeight = { min = 20, max = 70, def = 35 },
+	targetWidth = { min = 140, max = 420, def = 252 },
+	targetHeight = { min = 20, max = 70, def = 35 },
+	partyWidth = { min = 120, max = 360, def = 206 },
+	partyHeight = { min = 20, max = 70, def = 35 },
+	raidWidth = { min = 50, max = 160, def = 85 },
+	raidHeight = { min = 16, max = 50, def = 24 },
+	focusWidth = { min = 110, max = 360, def = 200 },
+	focusHeight = { min = 18, max = 60, def = 30 },
+	totWidth = { min = 90, max = 300, def = 167 },
+	totHeight = { min = 16, max = 50, def = 25 },
+	petWidth = { min = 90, max = 300, def = 152 },
+	petHeight = { min = 12, max = 40, def = 15 },
+	bossWidth = { min = 120, max = 360, def = 206 },
+	bossHeight = { min = 20, max = 70, def = 35 },
+	swingWidth = { min = 80, max = 360, def = 180 },
+	swingHeight = { min = 4, max = 24, def = 10 },
+	playerAuraSize = { min = 12, max = 40, def = 23 },
+	targetAuraSize = { min = 12, max = 40, def = 23 },
+	focusAuraSize = { min = 12, max = 40, def = 20 },
+	partyAuraSize = { min = 12, max = 40, def = 19 },
+}
+
+function ns.GetSize(key)
+	local info = SIZE_LIMITS[key]
+	if not info then return 0 end
+	local val = tonumber(ns.GetOptionsDB()[key])
+	if not val then return info.def end
+	return math.max(info.min, math.min(info.max, math.floor(val + 0.5)))
+end
+
+function ns.GetSizeLimits(key)
+	return SIZE_LIMITS[key]
 end
 
 function ns.TrackStatusBar(bar)
@@ -311,6 +410,8 @@ function ns.ApplyMedia()
 end
 
 local LIVE_OPTIONS = {
+	enableFader = true,
+	fadeOutAlpha = true,
 	firstNameOnly = true,
 	shortRaceNames = true,
 	showMinimapIcon = true,
@@ -330,28 +431,41 @@ local LIVE_OPTIONS = {
 	fontSizeOffset = true,
 	barAlpha = true,
 	borderSize = true,
+	smoothBars = true,
 	partySpacing = true,
+	partyDebuffPosition = true,
+	bossSpacing = true,
+	rangeAlpha = true,
 }
 
 local TAB_OPTION_KEYS = {
 	general = {
 		"firstNameOnly", "shortRaceNames", "hideSelfInfo", "enableHealthPrediction",
-		"enableFader", "removeBuffs", "showMinimapIcon",
+		"enableFader", "fadeOutAlpha", "removeBuffs", "showMinimapIcon",
 	},
 	frames = {
 		"showPortraits", "use2DPortraits", "showTargetTarget", "showTargetTargetTarget",
-		"showBossFrames", "enableClassPower", "useComboDots", "enableSwingBar",
+		"showBossFrames", "bossSpacing", "enableClassPower", "useComboDots", "enableSwingBar",
 		"enableTotemBar", "oUFRuneBar",
+	},
+	sizing = {
+		"playerWidth", "playerHeight", "targetWidth", "targetHeight",
+		"partyWidth", "partyHeight", "raidWidth", "raidHeight",
+		"focusWidth", "focusHeight", "totWidth", "totHeight",
+		"petWidth", "petHeight", "bossWidth", "bossHeight",
+		"swingWidth", "swingHeight",
+		"playerAuraSize", "targetAuraSize", "focusAuraSize", "partyAuraSize",
 	},
 	auras = {
 		"playerShowBuffs", "playerShowDebuffs", "playerCastBar",
 		"targetShowBuffs", "targetShowDebuffs", "targetCastBar",
 		"focusShowBuffs", "focusShowDebuffs", "focusCastBar",
 		"partyShowBuffs", "partyShowDebuffs",
+		"petShowAura", "petCastBar", "auraSizeOffset",
 		"desaturateOtherDebuffs", "highlightDispellableDebuffs", "highlightExpiringAuras",
 	},
 	group = {
-		"showRaidFrames", "hidePartyInRaid", "hideCompactRaidManager", "partySpacing",
+		"showRaidFrames", "hidePartyInRaid", "hideCompactRaidManager", "partyDebuffPosition", "partySpacing", "rangeAlpha",
 	},
 	clickcast = {
 		"enableClickCast",
@@ -363,7 +477,7 @@ local TAB_OPTION_KEYS = {
 		"enableThreatHighlight", "threatStyle", "showTargetThreat", "targetThreatRawPct",
 	},
 	appearance = {
-		"statusBarTexture", "fontName", "fontOutline", "fontSizeOffset", "barAlpha", "borderSize",
+		"statusBarTexture", "fontName", "fontOutline", "fontSizeOffset", "barAlpha", "borderSize", "smoothBars",
 	},
 }
 
@@ -917,6 +1031,164 @@ function ns.ToggleConfigGUI()
 		return btn
 	end
 
+	local function CreateFlatSlider(parent, cfg)
+		local yOff = cfg.yOffset or 0
+		local minVal = cfg.minVal or 0
+		local maxVal = cfg.maxVal or 100
+		local step = cfg.step or 1
+		local showLive = (cfg.live ~= false)
+
+		if cfg.divider ~= false then
+			local div = parent:CreateTexture(nil, "BORDER")
+			div:SetPoint("TOPLEFT", 12, -yOff)
+			div:SetPoint("TOPRIGHT", -12, -yOff)
+			div:SetHeight(1)
+			div:SetColorTexture(1, 1, 1, 0.06)
+		end
+
+		local lbl = parent:CreateFontString(nil, "OVERLAY")
+		lbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		lbl:SetPoint("TOPLEFT", 14, -(yOff + 8))
+		lbl:SetTextColor(0.92, 0.92, 0.95)
+		lbl:SetText(cfg.label or "")
+
+		local liveBadge
+		if showLive then
+			liveBadge = parent:CreateFontString(nil, "OVERLAY")
+			liveBadge:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+			liveBadge:SetPoint("TOPRIGHT", -14, -(yOff + 9))
+			liveBadge:SetTextColor(0.35, 0.78, 0.45)
+			liveBadge:SetText("LIVE")
+		end
+
+		local valText = parent:CreateFontString(nil, "OVERLAY")
+		valText:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		if liveBadge then
+			valText:SetPoint("RIGHT", liveBadge, "LEFT", -10, 0)
+		else
+			valText:SetPoint("TOPRIGHT", -14, -(yOff + 8))
+		end
+		valText:SetJustifyH("RIGHT")
+		valText:SetTextColor(1, 0.84, 0.45)
+
+		local slider = CreateFrame("Slider", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+		slider:SetPoint("TOPLEFT", 14, -(yOff + 28))
+		slider:SetPoint("TOPRIGHT", -14, -(yOff + 28))
+		slider:SetHeight(14)
+		slider:SetOrientation("HORIZONTAL")
+		slider:SetMinMaxValues(minVal, maxVal)
+		slider:SetValueStep(step)
+		if slider.SetObeyStepOnDrag then
+			slider:SetObeyStepOnDrag(true)
+		end
+		slider:EnableMouseWheel(true)
+
+		local track = CreateFrame("Frame", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+		track:SetPoint("LEFT", slider, "LEFT", 0, 0)
+		track:SetPoint("RIGHT", slider, "RIGHT", 0, 0)
+		track:SetHeight(6)
+		StyleFlatBox(track, 0.05, 0.05, 0.07, 1, 0.28, 0.28, 0.34, 1)
+		slider:SetFrameLevel(track:GetFrameLevel() + 2)
+
+		local thumb = slider:CreateTexture(nil, "OVERLAY")
+		thumb:SetSize(10, 14)
+		thumb:SetColorTexture(1, 0.56, 0.12, 1)
+		slider:SetThumbTexture(thumb)
+
+		local fill = track:CreateTexture(nil, "ARTWORK")
+		fill:SetPoint("TOPLEFT", track, "TOPLEFT", 1, -1)
+		fill:SetPoint("BOTTOM", track, "BOTTOM", 0, 1)
+		fill:SetPoint("RIGHT", thumb, "CENTER", 0, 0)
+		fill:SetColorTexture(0.85, 0.45, 0.08, 0.95)
+
+		local minLbl = parent:CreateFontString(nil, "OVERLAY")
+		minLbl:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		minLbl:SetPoint("TOPLEFT", 14, -(yOff + 45))
+		minLbl:SetTextColor(0.55, 0.55, 0.62)
+		minLbl:SetText(cfg.minText or tostring(minVal))
+
+		local maxLbl = parent:CreateFontString(nil, "OVERLAY")
+		maxLbl:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		maxLbl:SetPoint("TOPRIGHT", -14, -(yOff + 45))
+		maxLbl:SetTextColor(0.55, 0.55, 0.62)
+		maxLbl:SetText(cfg.maxText or tostring(maxVal))
+
+		local function SnapValue(v)
+			local snapped = math.floor(((v - minVal) / step) + 0.5) * step + minVal
+			return math.max(minVal, math.min(maxVal, snapped))
+		end
+
+		local function FormatText(v)
+			return cfg.formatVal and cfg.formatVal(v) or tostring(v)
+		end
+
+		function slider:SetValueSilent(v)
+			local snapped = SnapValue(tonumber(v) or minVal)
+			self._updating = true
+			self:SetValue(snapped)
+			self._updating = nil
+			valText:SetText(FormatText(snapped))
+			fill:SetShown(snapped > minVal)
+		end
+
+		function slider:SetEnabledState(enabled)
+			local en = (enabled ~= false)
+			self._disabled = not en
+			self:EnableMouse(en)
+			self:EnableMouseWheel(en)
+			local a = en and 1 or 0.42
+			lbl:SetAlpha(a)
+			valText:SetAlpha(a)
+			minLbl:SetAlpha(a)
+			maxLbl:SetAlpha(a)
+			track:SetAlpha(a)
+			thumb:SetAlpha(a)
+			if liveBadge then
+				liveBadge:SetAlpha(a)
+			end
+		end
+
+		slider:SetScript("OnEnter", function(self)
+			if not self._disabled then
+				track:SetBackdropBorderColor(1, 0.56, 0.12, 1)
+			end
+			if cfg.tip then
+				GameTooltip:SetOwner(self, "ANCHOR_TOP")
+				GameTooltip:AddLine(cfg.label or "", 1, 0.82, 0)
+				GameTooltip:AddLine(cfg.tip, 0.85, 0.85, 0.9, true)
+				if self._disabled and cfg.disabledTip then
+					GameTooltip:AddLine(cfg.disabledTip, 1, 0.45, 0.35, true)
+				end
+				GameTooltip:Show()
+			end
+		end)
+		slider:SetScript("OnLeave", function()
+			track:SetBackdropBorderColor(0.28, 0.28, 0.34, 1)
+			GameTooltip:Hide()
+		end)
+		slider:SetScript("OnMouseWheel", function(self, delta)
+			if self._disabled then return end
+			local cur = SnapValue(self:GetValue())
+			self:SetValue(SnapValue(cur + (delta > 0 and step or -step)))
+		end)
+		slider:SetScript("OnValueChanged", function(self, value)
+			if self._updating or self._disabled then return end
+			local snapped = SnapValue(value)
+			if math.abs(value - snapped) > 0.0001 then
+				self._updating = true
+				self:SetValue(snapped)
+				self._updating = nil
+			end
+			valText:SetText(FormatText(snapped))
+			fill:SetShown(snapped > minVal)
+			if cfg.onChanged then
+				cfg.onChanged(snapped)
+			end
+		end)
+
+		return slider
+	end
+
 	local function OpenColorPicker(r, g, b, onChanged, onCancel)
 		if ColorPickerFrame.SetupColorPickerAndShow then
 			ColorPickerFrame:SetupColorPickerAndShow({
@@ -1254,10 +1526,11 @@ function ns.ToggleConfigGUI()
 		dropdownCloseOverlay:Show()
 	end
 
-	-- Build 8 category pages
+	-- Build 9 category pages
 	local tabs = {
 		{ id = "general", label = "General" },
 		{ id = "frames", label = "Unit Frames" },
+		{ id = "sizing", label = "Sizing" },
 		{ id = "auras", label = "Auras & Casts" },
 		{ id = "group", label = "Party & Raid" },
 		{ id = "clickcast", label = "Click-Cast" },
@@ -1298,9 +1571,9 @@ function ns.ToggleConfigGUI()
 		pages[tab.id] = page
 
 		local tbtn = CreateFrame("Button", nil, sidebar)
-		tbtn:SetPoint("TOPLEFT", 6, -(12 + (i - 1) * 33))
-		tbtn:SetPoint("TOPRIGHT", -6, -(12 + (i - 1) * 33))
-		tbtn:SetHeight(27)
+		tbtn:SetPoint("TOPLEFT", 6, -(10 + (i - 1) * 30))
+		tbtn:SetPoint("TOPRIGHT", -6, -(10 + (i - 1) * 30))
+		tbtn:SetHeight(25)
 
 		local bg = tbtn:CreateTexture(nil, "BACKGROUND")
 		bg:SetAllPoints()
@@ -1341,6 +1614,7 @@ function ns.ToggleConfigGUI()
 	end
 
 	-- Page 1: General
+	local RefreshGeneralUI
 	do
 		local p = pages.general
 		local card1 = CreateCard(p, "Names & Visuals", 134, 12)
@@ -1354,21 +1628,52 @@ function ns.ToggleConfigGUI()
 			CreateToggleRow(card1, def, i)
 		end
 
-		local card2 = CreateCard(p, "Behavior & Interface", 110, 158)
+		local card2 = CreateCard(p, "Behavior & Interface", 168, 158)
 		local generalBehavior = {
 			{ key = "enableFader", label = "Fade Player & Pet Out of Combat", tip = "Smoothly fade Player and Pet frames when idle with no target." },
 			{ key = "removeBuffs", label = "Hide Default Blizzard Buff Frame", tip = "Disable Blizzard's top-right buff and weapon enchant frames." },
 			{ key = "showMinimapIcon", label = "Show Minimap Quick Toggle Icon", tip = "Display the draggable 'B' button around the minimap." },
 		}
 		for i, def in ipairs(generalBehavior) do
-			CreateToggleRow(card2, def, i)
+			local row = CreateToggleRow(card2, def, i)
+			if def.key == "enableFader" then
+				row:HookScript("OnClick", function()
+					if RefreshGeneralUI then RefreshGeneralUI() end
+				end)
+			end
+		end
+
+		local fadeSlider = CreateFlatSlider(card2, {
+			label = "Idle Fade Opacity",
+			yOffset = 108,
+			minVal = 0,
+			maxVal = 90,
+			step = 5,
+			minText = "0%",
+			maxText = "90%",
+			formatVal = function(v) return string.format("%d%%", v) end,
+			tip = "Opacity of Player & Pet frames when faded out of combat with no target.",
+			disabledTip = "Requires 'Fade Player & Pet Out of Combat' to be enabled.",
+			onChanged = function(v)
+				ns.GetOptionsDB().fadeOutAlpha = v / 100
+				if ns.ApplyFaderSettings then
+					ns.ApplyFaderSettings()
+				end
+			end,
+		})
+
+		RefreshGeneralUI = function()
+			local opts = ns.GetOptionsDB()
+			fadeSlider:SetValueSilent(math.floor(ns.GetFadeOutAlpha() * 100 + 0.5))
+			fadeSlider:SetEnabledState(opts.enableFader ~= false)
 		end
 	end
 
 	-- Page 2: Unit Frames
+	local RefreshFramesUI
 	do
 		local p = pages.frames
-		local card1 = CreateCard(p, "Frames & Portraits", 158, 12)
+		local card1 = CreateCard(p, "Frames & Portraits", 178, 8)
 		local frameToggles = {
 			{ key = "showPortraits", label = "Show Portraits (Player & Target)", tip = "Display framed portrait boxes beside Player and Target frames." },
 			{
@@ -1384,10 +1689,61 @@ function ns.ToggleConfigGUI()
 			{ key = "showBossFrames", label = "Enable Boss Frames (Boss 1-5)", tip = "Spawn dedicated encounter boss frames on the right." },
 		}
 		for i, def in ipairs(frameToggles) do
-			CreateToggleRow(card1, def, i)
+			local row = CreateToggleRow(card1, def, i)
+			if def.key == "showBossFrames" then
+				row:HookScript("OnClick", function()
+					if RefreshFramesUI then RefreshFramesUI() end
+				end)
+			end
 		end
 
-		local card2 = CreateCard(p, "Class & Combat Bars", 158, 182)
+		local bossLbl = card1:CreateFontString(nil, "OVERLAY")
+		bossLbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		bossLbl:SetPoint("TOPLEFT", 32, -153)
+		bossLbl:SetTextColor(0.86, 0.86, 0.90)
+		bossLbl:SetText("Boss Frame Spacing")
+
+		local bossLive = card1:CreateFontString(nil, "OVERLAY")
+		bossLive:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		bossLive:SetPoint("TOPRIGHT", -14, -154)
+		bossLive:SetTextColor(0.35, 0.78, 0.45)
+		bossLive:SetText("LIVE")
+
+		local bossPlus = CreateActionButton(card1, "+", 24, 20, function()
+			if not ns.GetOptionsDB().showBossFrames then return end
+			ns.GetOptionsDB().bossSpacing = math.min(120, ns.GetBossSpacing() + 4)
+			if ns.ApplyBossSpacing then ns.ApplyBossSpacing() end
+			if RefreshFramesUI then RefreshFramesUI() end
+		end)
+		bossPlus:SetPoint("RIGHT", bossLive, "LEFT", -8, 0)
+
+		local bossVal = card1:CreateFontString(nil, "OVERLAY")
+		bossVal:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		bossVal:SetWidth(52)
+		bossVal:SetPoint("RIGHT", bossPlus, "LEFT", -4, 0)
+		bossVal:SetJustifyH("CENTER")
+		bossVal:SetTextColor(1, 0.84, 0.45)
+
+		local bossMinus = CreateActionButton(card1, "-", 24, 20, function()
+			if not ns.GetOptionsDB().showBossFrames then return end
+			ns.GetOptionsDB().bossSpacing = math.max(0, ns.GetBossSpacing() - 4)
+			if ns.ApplyBossSpacing then ns.ApplyBossSpacing() end
+			if RefreshFramesUI then RefreshFramesUI() end
+		end)
+		bossMinus:SetPoint("RIGHT", bossVal, "LEFT", -4, 0)
+
+		RefreshFramesUI = function()
+			local enabled = (ns.GetOptionsDB().showBossFrames ~= false)
+			bossVal:SetText(ns.GetBossSpacing() .. " px")
+			local a = enabled and 1 or 0.42
+			bossLbl:SetAlpha(a)
+			bossLive:SetAlpha(a)
+			bossVal:SetAlpha(a)
+			bossPlus:SetAlpha(a)
+			bossMinus:SetAlpha(a)
+		end
+
+		local card2 = CreateCard(p, "Class & Combat Bars", 156, 192)
 		local classBars = {
 			{ key = "enableClassPower", label = "Class Power, Combo Points & Stagger", tip = "Show Combo Points, Holy Power, Chi, Soul Shards, Arcane Charges, Essence, or Stagger." },
 			{
@@ -1407,10 +1763,172 @@ function ns.ToggleConfigGUI()
 		end
 	end
 
-	-- Page 3: Auras & Casts
+	-- Page 3: Sizing
+	local RefreshSizingUI
+	do
+		local p = pages.sizing
+		local card1 = CreateCard(p, "Unit Frame Dimensions (Width x Height)", 250, 8)
+
+		local reloadNote = card1:CreateFontString(nil, "OVERLAY")
+		reloadNote:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		reloadNote:SetPoint("TOPRIGHT", -12, -11)
+		reloadNote:SetTextColor(0.9, 0.65, 0.3)
+		reloadNote:SetText("Reload UI")
+
+		local sizeSteppers = {}
+		local function CreateSizeStepper(parent, key, normalStep, shiftStep, onAfterChange)
+			local lim = ns.GetSizeLimits and ns.GetSizeLimits(key) or { min = 10, max = 400, def = 100 }
+			local wrap = CreateFrame("Frame", nil, parent)
+			wrap:SetSize(90, 18)
+			wrap:EnableMouseWheel(true)
+
+			local function StepBy(delta)
+				local nextVal = math.max(lim.min, math.min(lim.max, ns.GetSize(key) + delta))
+				ns.GetOptionsDB()[key] = nextVal
+				reloadNeeded = true
+				UpdateReloadHint()
+				if onAfterChange then onAfterChange(nextVal) end
+				if RefreshSizingUI then RefreshSizingUI() end
+			end
+
+			local minus = CreateActionButton(wrap, "-", 20, 18, function()
+				local d = IsShiftKeyDown() and shiftStep or normalStep
+				StepBy(-d)
+			end)
+			minus:SetPoint("LEFT", 0, 0)
+
+			local valFs = wrap:CreateFontString(nil, "OVERLAY")
+			valFs:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+			valFs:SetWidth(42)
+			valFs:SetPoint("CENTER", 0, 0)
+			valFs:SetJustifyH("CENTER")
+			valFs:SetTextColor(1, 0.84, 0.45)
+
+			local plus = CreateActionButton(wrap, "+", 20, 18, function()
+				local d = IsShiftKeyDown() and shiftStep or normalStep
+				StepBy(d)
+			end)
+			plus:SetPoint("RIGHT", 0, 0)
+
+			local function ShowTip(self)
+				GameTooltip:SetOwner(self, "ANCHOR_TOP")
+				GameTooltip:AddLine(string.format("%d - %d px  (Default: %d px)", lim.min, lim.max, lim.def), 1, 0.82, 0)
+				GameTooltip:AddLine(string.format("Click: +/-%d px  |  Shift-Click: +/-%d px  |  Scroll: +/-1 px", normalStep, shiftStep), 0.85, 0.85, 0.9, true)
+				GameTooltip:AddLine("Requires Reload UI to apply frame layout.", 0.9, 0.65, 0.3)
+				GameTooltip:Show()
+			end
+			local function HideTip() GameTooltip:Hide() end
+
+			wrap:SetScript("OnMouseWheel", function(_, delta)
+				local step = IsShiftKeyDown() and shiftStep or 1
+				StepBy(delta > 0 and step or -step)
+			end)
+			minus:HookScript("OnEnter", ShowTip)
+			minus:HookScript("OnLeave", HideTip)
+			plus:HookScript("OnEnter", ShowTip)
+			plus:HookScript("OnLeave", HideTip)
+
+			sizeSteppers[key] = valFs
+			return wrap
+		end
+
+		local hdrUnit = card1:CreateFontString(nil, "OVERLAY")
+		hdrUnit:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		hdrUnit:SetPoint("TOPLEFT", 14, -30)
+		hdrUnit:SetTextColor(0.58, 0.58, 0.65)
+		hdrUnit:SetText("Unit / Bar")
+
+		local hdrW = card1:CreateFontString(nil, "OVERLAY")
+		hdrW:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		hdrW:SetPoint("TOP", card1, "TOPLEFT", 197, -30)
+		hdrW:SetTextColor(0.58, 0.58, 0.65)
+		hdrW:SetText("Width (px)")
+
+		local hdrH = card1:CreateFontString(nil, "OVERLAY")
+		hdrH:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		hdrH:SetPoint("TOP", card1, "TOPLEFT", 339, -30)
+		hdrH:SetTextColor(0.58, 0.58, 0.65)
+		hdrH:SetText("Height (px)")
+
+		local sizeRows = {
+			{ label = "Player", wKey = "playerWidth", hKey = "playerHeight" },
+			{ label = "Target", wKey = "targetWidth", hKey = "targetHeight" },
+			{ label = "Party", wKey = "partyWidth", hKey = "partyHeight" },
+			{ label = "Raid", wKey = "raidWidth", hKey = "raidHeight" },
+			{ label = "Focus", wKey = "focusWidth", hKey = "focusHeight" },
+			{ label = "ToT / ToToT", wKey = "totWidth", hKey = "totHeight" },
+			{ label = "Pet", wKey = "petWidth", hKey = "petHeight" },
+			{ label = "Boss", wKey = "bossWidth", hKey = "bossHeight" },
+			{ label = "Swing Bar", wKey = "swingWidth", hKey = "swingHeight" },
+		}
+		for idx, def in ipairs(sizeRows) do
+			local rowY = 45 + (idx - 1) * 22
+			if idx % 2 == 1 then
+				local stripe = card1:CreateTexture(nil, "BACKGROUND")
+				stripe:SetPoint("TOPLEFT", 10, -rowY + 1)
+				stripe:SetPoint("TOPRIGHT", -10, -rowY + 1)
+				stripe:SetHeight(20)
+				stripe:SetColorTexture(1, 1, 1, 0.025)
+			end
+
+			local lbl = card1:CreateFontString(nil, "OVERLAY")
+			lbl:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+			lbl:SetPoint("TOPLEFT", 14, -(rowY + 2))
+			lbl:SetTextColor(0.92, 0.92, 0.95)
+			lbl:SetText(def.label)
+
+			local wWrap = CreateSizeStepper(card1, def.wKey, 2, 10)
+			wWrap:SetPoint("TOPLEFT", card1, "TOPLEFT", 152, -rowY)
+
+			local xSep = card1:CreateFontString(nil, "OVERLAY")
+			xSep:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+			xSep:SetPoint("TOP", card1, "TOPLEFT", 268, -(rowY + 3))
+			xSep:SetTextColor(0.5, 0.5, 0.56)
+			xSep:SetText("x")
+
+			local hWrap = CreateSizeStepper(card1, def.hKey, 1, 5)
+			hWrap:SetPoint("TOPLEFT", card1, "TOPLEFT", 294, -rowY)
+		end
+
+		local card2 = CreateCard(p, "Aura Icon Sizes (px)", 82, 264)
+		local auraGrid = {
+			{ label = "Player", key = "playerAuraSize", col = 0, row = 0 },
+			{ label = "Target", key = "targetAuraSize", col = 1, row = 0 },
+			{ label = "Focus", key = "focusAuraSize", col = 0, row = 1 },
+			{ label = "Party / Boss", key = "partyAuraSize", col = 1, row = 1 },
+		}
+		local function OnAuraBaseSizeChanged()
+			if ns.ApplyTestDebuffs then
+				ns.ApplyTestDebuffs()
+			end
+		end
+		for _, def in ipairs(auraGrid) do
+			local yPos = 33 + def.row * 23
+			local xLbl = (def.col == 0) and 14 or 214
+			local xRight = (def.col == 0) and -214 or -14
+
+			local lbl = card2:CreateFontString(nil, "OVERLAY")
+			lbl:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+			lbl:SetPoint("TOPLEFT", xLbl, -(yPos + 2))
+			lbl:SetTextColor(0.92, 0.92, 0.95)
+			lbl:SetText(def.label)
+
+			local aWrap = CreateSizeStepper(card2, def.key, 1, 5, OnAuraBaseSizeChanged)
+			aWrap:SetPoint("TOPRIGHT", card2, "TOPRIGHT", xRight, -yPos)
+		end
+
+		RefreshSizingUI = function()
+			for key, fs in pairs(sizeSteppers) do
+				fs:SetText(tostring(ns.GetSize(key)))
+			end
+		end
+	end
+
+	-- Page 4: Auras & Casts
+	local RefreshAurasUI
 	do
 		local p = pages.auras
-		local card1 = CreateCard(p, "Unit Auras & Castbars", 168, 12)
+		local card1 = CreateCard(p, "Unit Auras & Castbars", 186, 10)
 
 		local colBuffsX, colDebuffsX, colCastX = 205, 285, 365
 		local colHeaders = {
@@ -1424,11 +1942,19 @@ function ns.ToggleConfigGUI()
 			fs:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
 			fs:SetTextColor(0.65, 0.65, 0.72)
 			if ch.align == "LEFT" then
-				fs:SetPoint("TOPLEFT", ch.x, -34)
+				fs:SetPoint("TOPLEFT", ch.x, -33)
 			else
-				fs:SetPoint("TOP", card1, "TOPLEFT", ch.x, -34)
+				fs:SetPoint("TOP", card1, "TOPLEFT", ch.x, -33)
 			end
 			fs:SetText(ch.text)
+		end
+
+		local function AddMatrixDash(xPos, rowY)
+			local dash = card1:CreateFontString(nil, "OVERLAY")
+			dash:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+			dash:SetPoint("TOP", card1, "TOPLEFT", xPos, -(rowY + 4))
+			dash:SetTextColor(0.4, 0.4, 0.45)
+			dash:SetText("-")
 		end
 
 		local matrixRows = {
@@ -1436,9 +1962,10 @@ function ns.ToggleConfigGUI()
 			{ unit = "Target", buffs = "targetShowBuffs", debuffs = "targetShowDebuffs", cast = "targetCastBar" },
 			{ unit = "Focus", buffs = "focusShowBuffs", debuffs = "focusShowDebuffs", cast = "focusCastBar" },
 			{ unit = "Party", buffs = "partyShowBuffs", debuffs = "partyShowDebuffs", cast = nil },
+			{ unit = "Pet", buffs = "petShowAura", debuffs = nil, cast = "petCastBar", buffsTip = "Show Pet Auras (Buffs & Debuffs)" },
 		}
 		for idx, r in ipairs(matrixRows) do
-			local rowY = 54 + (idx - 1) * 27
+			local rowY = 52 + (idx - 1) * 26
 			if idx % 2 == 1 then
 				local stripe = card1:CreateTexture(nil, "BACKGROUND")
 				stripe:SetPoint("TOPLEFT", 10, -rowY + 2)
@@ -1453,20 +1980,20 @@ function ns.ToggleConfigGUI()
 			unitLabel:SetTextColor(0.92, 0.92, 0.95)
 			unitLabel:SetText(r.unit)
 
-			CreateMatrixCell(card1, r.buffs, "Show " .. r.unit .. " Buffs", colBuffsX, rowY)
-			CreateMatrixCell(card1, r.debuffs, "Show " .. r.unit .. " Debuffs", colDebuffsX, rowY)
+			CreateMatrixCell(card1, r.buffs, r.buffsTip or ("Show " .. r.unit .. " Buffs"), colBuffsX, rowY)
+			if r.debuffs then
+				CreateMatrixCell(card1, r.debuffs, "Show " .. r.unit .. " Debuffs", colDebuffsX, rowY)
+			else
+				AddMatrixDash(colDebuffsX, rowY)
+			end
 			if r.cast then
 				CreateMatrixCell(card1, r.cast, "Show " .. r.unit .. " Castbar", colCastX, rowY)
 			else
-				local dash = card1:CreateFontString(nil, "OVERLAY")
-				dash:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
-				dash:SetPoint("TOP", card1, "TOPLEFT", colCastX, -(rowY + 4))
-				dash:SetTextColor(0.4, 0.4, 0.45)
-				dash:SetText("-")
+				AddMatrixDash(colCastX, rowY)
 			end
 		end
 
-		local card2 = CreateCard(p, "Aura Filtering & Highlights", 110, 192)
+		local card2 = CreateCard(p, "Aura Filtering & Highlights", 138, 204)
 		local auraExtras = {
 			{ key = "desaturateOtherDebuffs", label = "Prioritize Player Debuffs & Desaturate Others", tip = "Sort your debuffs first on Target/Boss and grey out others' debuffs." },
 			{ key = "highlightDispellableDebuffs", label = "Highlight Dispellable Debuffs (Player Class)", tip = "Border-highlight and prioritize debuffs your class can dispel." },
@@ -1475,13 +2002,61 @@ function ns.ToggleConfigGUI()
 		for i, def in ipairs(auraExtras) do
 			CreateToggleRow(card2, def, i)
 		end
+
+		local auraDiv = card2:CreateTexture(nil, "BORDER")
+		auraDiv:SetPoint("TOPLEFT", 12, -104)
+		auraDiv:SetPoint("TOPRIGHT", -12, -104)
+		auraDiv:SetHeight(1)
+		auraDiv:SetColorTexture(1, 1, 1, 0.06)
+
+		local auraSizeLbl = card2:CreateFontString(nil, "OVERLAY")
+		auraSizeLbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		auraSizeLbl:SetPoint("TOPLEFT", 14, -114)
+		auraSizeLbl:SetTextColor(0.92, 0.92, 0.95)
+		auraSizeLbl:SetText("Aura Icon Size Adjust (Reload)")
+
+		local auraSizePlus = CreateActionButton(card2, "+", 26, 20, function()
+			ns.GetOptionsDB().auraSizeOffset = math.min(8, ns.GetAuraSizeOffset() + 1)
+			reloadNeeded = true
+			UpdateReloadHint()
+			if ns.ApplyTestDebuffs then ns.ApplyTestDebuffs() end
+			if RefreshAurasUI then RefreshAurasUI() end
+		end)
+		auraSizePlus:SetPoint("TOPRIGHT", -14, -110)
+
+		local auraSizeVal = card2:CreateFontString(nil, "OVERLAY")
+		auraSizeVal:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		auraSizeVal:SetWidth(86)
+		auraSizeVal:SetPoint("RIGHT", auraSizePlus, "LEFT", -6, 0)
+		auraSizeVal:SetJustifyH("CENTER")
+		auraSizeVal:SetTextColor(1, 0.84, 0.45)
+
+		local auraSizeMinus = CreateActionButton(card2, "-", 26, 20, function()
+			ns.GetOptionsDB().auraSizeOffset = math.max(-6, ns.GetAuraSizeOffset() - 1)
+			reloadNeeded = true
+			UpdateReloadHint()
+			if ns.ApplyTestDebuffs then ns.ApplyTestDebuffs() end
+			if RefreshAurasUI then RefreshAurasUI() end
+		end)
+		auraSizeMinus:SetPoint("RIGHT", auraSizeVal, "LEFT", -6, 0)
+
+		RefreshAurasUI = function()
+			local off = ns.GetAuraSizeOffset()
+			if off == 0 then
+				auraSizeVal:SetText("Default (0)")
+			elseif off > 0 then
+				auraSizeVal:SetText("+" .. off .. " px")
+			else
+				auraSizeVal:SetText(off .. " px")
+			end
+		end
 	end
 
 	-- Page 4: Party & Raid
 	local RefreshGroupUI
 	do
 		local p = pages.group
-		local card1 = CreateCard(p, "Group & Raid Layout", 174, 12)
+		local card1 = CreateCard(p, "Group & Raid Layout", 258, 8)
 		local groupToggles = {
 			{ key = "showRaidFrames", label = "Enable Raid Frames (8-Group Compact Grid)", tip = "Replace Blizzard raid frames with the compact 8-group oUF_Brun grid." },
 			{ key = "hidePartyInRaid", label = "Hide Party Frames when in a Raid", tip = "Hide the 4-member party stack automatically while in a raid group." },
@@ -1491,131 +2066,111 @@ function ns.ToggleConfigGUI()
 			CreateToggleRow(card1, def, i)
 		end
 
-		local spacingDivider = card1:CreateTexture(nil, "BORDER")
-		spacingDivider:SetPoint("TOPLEFT", 12, -112)
-		spacingDivider:SetPoint("TOPRIGHT", -12, -112)
-		spacingDivider:SetHeight(1)
-		spacingDivider:SetColorTexture(1, 1, 1, 0.06)
+		local posDiv = card1:CreateTexture(nil, "BORDER")
+		posDiv:SetPoint("TOPLEFT", 12, -106)
+		posDiv:SetPoint("TOPRIGHT", -12, -106)
+		posDiv:SetHeight(1)
+		posDiv:SetColorTexture(1, 1, 1, 0.06)
 
-		local spacingLabel = card1:CreateFontString(nil, "OVERLAY")
-		spacingLabel:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
-		spacingLabel:SetPoint("TOPLEFT", 14, -120)
-		spacingLabel:SetTextColor(0.92, 0.92, 0.95)
-		spacingLabel:SetText("Party Frame Spacing")
+		local posLbl = card1:CreateFontString(nil, "OVERLAY")
+		posLbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		posLbl:SetPoint("TOPLEFT", 14, -115)
+		posLbl:SetTextColor(0.92, 0.92, 0.95)
+		posLbl:SetText("Party Debuffs Position")
 
-		local spacingLive = card1:CreateFontString(nil, "OVERLAY")
-		spacingLive:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
-		spacingLive:SetPoint("TOPRIGHT", -14, -121)
-		spacingLive:SetTextColor(0.35, 0.78, 0.45)
-		spacingLive:SetText("LIVE")
+		local posLive = card1:CreateFontString(nil, "OVERLAY")
+		posLive:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		posLive:SetPoint("TOPRIGHT", -14, -116)
+		posLive:SetTextColor(0.35, 0.78, 0.45)
+		posLive:SetText("LIVE")
 
-		local spacingVal = card1:CreateFontString(nil, "OVERLAY")
-		spacingVal:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
-		spacingVal:SetPoint("RIGHT", spacingLive, "LEFT", -10, 0)
-		spacingVal:SetJustifyH("RIGHT")
-		spacingVal:SetTextColor(1, 0.84, 0.45)
-
-		local spacingSlider = CreateFrame("Slider", nil, card1, BackdropTemplateMixin and "BackdropTemplate" or nil)
-		spacingSlider:SetPoint("TOPLEFT", 14, -140)
-		spacingSlider:SetPoint("TOPRIGHT", -14, -140)
-		spacingSlider:SetHeight(14)
-		spacingSlider:SetOrientation("HORIZONTAL")
-		spacingSlider:SetMinMaxValues(0, 120)
-		spacingSlider:SetValueStep(1)
-		if spacingSlider.SetObeyStepOnDrag then
-			spacingSlider:SetObeyStepOnDrag(true)
+		local function MakePosBtn(id, label, tip)
+			local b = CreateActionButton(card1, label, 64, 20, function()
+				ns.GetOptionsDB().partyDebuffPosition = id
+				if ns.ApplyPartyDebuffPosition then
+					ns.ApplyPartyDebuffPosition()
+				end
+				if RefreshGroupUI then RefreshGroupUI() end
+			end)
+			b:HookScript("OnEnter", function(self)
+				GameTooltip:SetOwner(self, "ANCHOR_TOP")
+				GameTooltip:AddLine("Party Debuffs: " .. label, 1, 0.82, 0)
+				GameTooltip:AddLine(tip, 0.85, 0.85, 0.9, true)
+				GameTooltip:AddLine("Applies immediately out of combat.", 0.35, 0.85, 0.45)
+				GameTooltip:Show()
+			end)
+			b:HookScript("OnLeave", function() GameTooltip:Hide() end)
+			return b
 		end
-		spacingSlider:EnableMouseWheel(true)
 
-		local track = CreateFrame("Frame", nil, card1, BackdropTemplateMixin and "BackdropTemplate" or nil)
-		track:SetPoint("LEFT", spacingSlider, "LEFT", 0, 0)
-		track:SetPoint("RIGHT", spacingSlider, "RIGHT", 0, 0)
-		track:SetHeight(6)
-		StyleFlatBox(track, 0.05, 0.05, 0.07, 1, 0.28, 0.28, 0.34, 1)
-		spacingSlider:SetFrameLevel(track:GetFrameLevel() + 2)
+		local posBelowBtn = MakePosBtn("below", "Below", "Anchor party debuffs underneath each party frame.")
+		posBelowBtn:SetPoint("RIGHT", posLive, "LEFT", -10, 0)
 
-		local thumb = spacingSlider:CreateTexture(nil, "OVERLAY")
-		thumb:SetSize(10, 14)
-		thumb:SetColorTexture(1, 0.56, 0.12, 1)
-		spacingSlider:SetThumbTexture(thumb)
+		local posRightBtn = MakePosBtn("right", "Right", "Anchor party debuffs vertically centered on the right of each party frame for tighter vertical spacing.")
+		posRightBtn:SetPoint("RIGHT", posBelowBtn, "LEFT", -6, 0)
 
-		local fill = track:CreateTexture(nil, "ARTWORK")
-		fill:SetPoint("TOPLEFT", track, "TOPLEFT", 1, -1)
-		fill:SetPoint("BOTTOM", track, "BOTTOM", 0, 1)
-		fill:SetPoint("RIGHT", thumb, "CENTER", 0, 0)
-		fill:SetColorTexture(0.85, 0.45, 0.08, 0.95)
+		local spacingSlider = CreateFlatSlider(card1, {
+			label = "Party Frame Spacing",
+			yOffset = 138,
+			minVal = 0,
+			maxVal = 120,
+			step = 1,
+			minText = "0 px",
+			maxText = "120 px",
+			formatVal = function(v) return v .. " px" end,
+			tip = "Vertical gap in pixels between party frames (0-120 px). Applies live out of combat (works with Test Frames).",
+			onChanged = function(v)
+				ns.GetOptionsDB().partySpacing = v
+				if ns.ApplyPartySpacing then
+					ns.ApplyPartySpacing()
+				end
+			end,
+		})
 
-		local minLbl = card1:CreateFontString(nil, "OVERLAY")
-		minLbl:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
-		minLbl:SetPoint("TOPLEFT", 14, -157)
-		minLbl:SetTextColor(0.55, 0.55, 0.62)
-		minLbl:SetText("0 px")
+		local rangeSlider = CreateFlatSlider(card1, {
+			label = "Out-of-Range Opacity (Party & Raid)",
+			yOffset = 198,
+			minVal = 20,
+			maxVal = 90,
+			step = 5,
+			minText = "20%",
+			maxText = "90%",
+			formatVal = function(v) return string.format("%d%%", v) end,
+			tip = "Opacity of Party and Raid frames when a unit is out of range.",
+			onChanged = function(v)
+				ns.GetOptionsDB().rangeAlpha = v / 100
+				if ns.ApplyRangeAlpha then
+					ns.ApplyRangeAlpha()
+				end
+			end,
+		})
 
-		local maxLbl = card1:CreateFontString(nil, "OVERLAY")
-		maxLbl:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
-		maxLbl:SetPoint("TOPRIGHT", -14, -157)
-		maxLbl:SetTextColor(0.55, 0.55, 0.62)
-		maxLbl:SetText("120 px")
-
-		spacingSlider:SetScript("OnEnter", function(self)
-			track:SetBackdropBorderColor(1, 0.56, 0.12, 1)
-			GameTooltip:SetOwner(self, "ANCHOR_TOP")
-			GameTooltip:AddLine("Party Frame Spacing", 1, 0.82, 0)
-			GameTooltip:AddLine("Vertical gap in pixels between party frames (0-120 px). Applies live out of combat (works with Test Frames).", 0.85, 0.85, 0.9, true)
-			GameTooltip:Show()
-		end)
-		spacingSlider:SetScript("OnLeave", function()
-			track:SetBackdropBorderColor(0.28, 0.28, 0.34, 1)
-			GameTooltip:Hide()
-		end)
-		spacingSlider:SetScript("OnMouseWheel", function(self, delta)
-			local cur = ns.GetPartySpacing()
-			local nextVal = math.max(0, math.min(120, cur + (delta > 0 and 1 or -1)))
-			self:SetValue(nextVal)
-		end)
-		spacingSlider:SetScript("OnValueChanged", function(self, value)
-			if self._updating then return end
-			local rounded = math.max(0, math.min(120, math.floor(value + 0.5)))
-			if value ~= rounded then
-				self._updating = true
-				self:SetValue(rounded)
-				self._updating = nil
-			end
-			ns.GetOptionsDB().partySpacing = rounded
-			spacingVal:SetText(rounded .. " px")
-			fill:SetShown(rounded > 0)
-			if ns.ApplyPartySpacing then
-				ns.ApplyPartySpacing()
-			end
-		end)
-
-		local card2 = CreateCard(p, "Healing & Click-Casting", 98, 198)
+		local card2 = CreateCard(p, "Healing & Click-Casting", 74, 272)
 		local clickCastStatusText = card2:CreateFontString(nil, "OVERLAY")
 		clickCastStatusText:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
-		clickCastStatusText:SetPoint("TOPLEFT", 14, -38)
+		clickCastStatusText:SetPoint("TOPLEFT", 14, -34)
 		clickCastStatusText:SetPoint("RIGHT", -186, 0)
 		clickCastStatusText:SetJustifyH("LEFT")
 
-		local openClickCastBtn = CreateActionButton(card2, "Configure Click-Cast...", 164, 24, function()
+		local openClickCastBtn = CreateActionButton(card2, "Configure Click-Cast...", 164, 22, function()
 			SelectTab("clickcast")
 		end)
-		openClickCastBtn:SetPoint("TOPRIGHT", -12, -34)
+		openClickCastBtn:SetPoint("TOPRIGHT", -12, -30)
 
 		local bindNote = card2:CreateFontString(nil, "OVERLAY")
 		bindNote:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
-		bindNote:SetPoint("TOPLEFT", 14, -66)
-		bindNote:SetPoint("TOPRIGHT", -14, -66)
+		bindNote:SetPoint("TOPLEFT", 14, -55)
+		bindNote:SetPoint("TOPRIGHT", -14, -55)
 		bindNote:SetJustifyH("LEFT")
 		bindNote:SetTextColor(0.62, 0.62, 0.68)
 		bindNote:SetText("Configure buttons, modifiers, spells & Blizzard unit menu in Click-Cast.")
 
 		RefreshGroupUI = function()
-			local val = ns.GetPartySpacing()
-			spacingSlider._updating = true
-			spacingSlider:SetValue(val)
-			spacingSlider._updating = nil
-			spacingVal:SetText(val .. " px")
-			fill:SetShown(val > 0)
+			local pos = ns.GetPartyDebuffPosition()
+			posRightBtn:SetActive(pos == "right")
+			posBelowBtn:SetActive(pos == "below")
+			spacingSlider:SetValueSilent(ns.GetPartySpacing())
+			rangeSlider:SetValueSilent(math.floor(ns.GetRangeAlpha() * 100 + 0.5))
 
 			local ccEnabled = ns.GetOptionsDB().enableClickCast == true
 			local summary = ns.GetClickCastSummary and ns.GetClickCastSummary() or nil
@@ -2431,7 +2986,7 @@ function ns.ToggleConfigGUI()
 			and "LibSharedMedia-3.0 active: shared textures & fonts apply live."
 			or "Using built-in media. Add SharedMedia / LSM-3.0 addons for more.")
 
-		local card2 = CreateCard(p, "Typography & Frame Style", 200, 142)
+		local card2 = CreateCard(p, "Typography & Frame Style", 204, 140)
 
 		local liveBadge2 = card2:CreateFontString(nil, "OVERLAY")
 		liveBadge2:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
@@ -2442,7 +2997,7 @@ function ns.ToggleConfigGUI()
 		-- Row 1: Font Outline
 		local outlineLbl = card2:CreateFontString(nil, "OVERLAY")
 		outlineLbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
-		outlineLbl:SetPoint("TOPLEFT", 14, -41)
+		outlineLbl:SetPoint("TOPLEFT", 14, -39)
 		outlineLbl:SetTextColor(0.92, 0.92, 0.95)
 		outlineLbl:SetText("Font Outline")
 
@@ -2461,7 +3016,7 @@ function ns.ToggleConfigGUI()
 				RefreshAppearanceUI()
 			end)
 			if i == #outlineDefs then
-				b:SetPoint("TOPRIGHT", -14, -36)
+				b:SetPoint("TOPRIGHT", -14, -34)
 			else
 				b:SetPoint("RIGHT", outlineBtns[i + 1], "LEFT", -6, 0)
 			end
@@ -2472,7 +3027,7 @@ function ns.ToggleConfigGUI()
 		-- Row 2: Font Size Adjust
 		local sizeLbl = card2:CreateFontString(nil, "OVERLAY")
 		sizeLbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
-		sizeLbl:SetPoint("TOPLEFT", 14, -81)
+		sizeLbl:SetPoint("TOPLEFT", 14, -73)
 		sizeLbl:SetTextColor(0.92, 0.92, 0.95)
 		sizeLbl:SetText("Font Size Adjust")
 
@@ -2482,7 +3037,7 @@ function ns.ToggleConfigGUI()
 			ns.ApplyMedia()
 			RefreshAppearanceUI()
 		end)
-		sizePlus:SetPoint("TOPRIGHT", -14, -76)
+		sizePlus:SetPoint("TOPRIGHT", -14, -68)
 
 		local sizeVal = card2:CreateFontString(nil, "OVERLAY")
 		sizeVal:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
@@ -2502,7 +3057,7 @@ function ns.ToggleConfigGUI()
 		-- Row 3: Health Bar Opacity
 		local alphaLbl = card2:CreateFontString(nil, "OVERLAY")
 		alphaLbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
-		alphaLbl:SetPoint("TOPLEFT", 14, -121)
+		alphaLbl:SetPoint("TOPLEFT", 14, -107)
 		alphaLbl:SetTextColor(0.92, 0.92, 0.95)
 		alphaLbl:SetText("Health Bar Opacity")
 
@@ -2512,7 +3067,7 @@ function ns.ToggleConfigGUI()
 			ns.ApplyMedia()
 			RefreshAppearanceUI()
 		end)
-		alphaPlus:SetPoint("TOPRIGHT", -14, -116)
+		alphaPlus:SetPoint("TOPRIGHT", -14, -102)
 
 		local alphaVal = card2:CreateFontString(nil, "OVERLAY")
 		alphaVal:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
@@ -2532,7 +3087,7 @@ function ns.ToggleConfigGUI()
 		-- Row 4: Frame Border Size
 		local borderLbl = card2:CreateFontString(nil, "OVERLAY")
 		borderLbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
-		borderLbl:SetPoint("TOPLEFT", 14, -161)
+		borderLbl:SetPoint("TOPLEFT", 14, -141)
 		borderLbl:SetTextColor(0.92, 0.92, 0.95)
 		borderLbl:SetText("Frame Border Size")
 
@@ -2550,13 +3105,34 @@ function ns.ToggleConfigGUI()
 				RefreshAppearanceUI()
 			end)
 			if i == #borderDefs then
-				b:SetPoint("TOPRIGHT", -14, -156)
+				b:SetPoint("TOPRIGHT", -14, -136)
 			else
 				b:SetPoint("RIGHT", borderBtns[i + 1], "LEFT", -8, 0)
 			end
 			b.borderSize = def.size
 			borderBtns[i] = b
 		end
+
+		-- Row 5: Smooth Bar Transitions
+		local smoothLbl = card2:CreateFontString(nil, "OVERLAY")
+		smoothLbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		smoothLbl:SetPoint("TOPLEFT", 14, -175)
+		smoothLbl:SetTextColor(0.92, 0.92, 0.95)
+		smoothLbl:SetText("Smooth Bar Transitions")
+
+		local smoothOffBtn = CreateActionButton(card2, "Off", 74, 22, function()
+			ns.GetOptionsDB().smoothBars = false
+			if ns.ApplySmoothBars then ns.ApplySmoothBars() end
+			RefreshAppearanceUI()
+		end)
+		smoothOffBtn:SetPoint("TOPRIGHT", -14, -170)
+
+		local smoothOnBtn = CreateActionButton(card2, "On", 74, 22, function()
+			ns.GetOptionsDB().smoothBars = true
+			if ns.ApplySmoothBars then ns.ApplySmoothBars() end
+			RefreshAppearanceUI()
+		end)
+		smoothOnBtn:SetPoint("RIGHT", smoothOffBtn, "LEFT", -8, 0)
 
 		RefreshAppearanceUI = function()
 			local opts = ns.GetOptionsDB()
@@ -2590,6 +3166,10 @@ function ns.ToggleConfigGUI()
 			for _, b in ipairs(borderBtns) do
 				b:SetActive(b.borderSize == bSize)
 			end
+
+			local isSmooth = ns.GetSmoothBars()
+			smoothOnBtn:SetActive(isSmooth)
+			smoothOffBtn:SetActive(not isSmooth)
 		end
 	end
 
@@ -2598,6 +3178,10 @@ function ns.ToggleConfigGUI()
 			cb:SetChecked(curOpts[k])
 		end
 		RefreshDependencies()
+		if RefreshGeneralUI then RefreshGeneralUI() end
+		if RefreshFramesUI then RefreshFramesUI() end
+		if RefreshSizingUI then RefreshSizingUI() end
+		if RefreshAurasUI then RefreshAurasUI() end
 		if RefreshGroupUI then RefreshGroupUI() end
 		if RefreshClickCastUI then RefreshClickCastUI() end
 		if RefreshColorUI then RefreshColorUI() end

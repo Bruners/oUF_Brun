@@ -9,7 +9,12 @@ assert(oUF, "oUF_Brun requires oUF to be loaded.")
 
 local issecretvalue = _G.issecretvalue or function() return false end
 local nop = _G.nop or function() end
-local smoothInterpolation = Enum.StatusBarInterpolation.ExponentialEaseOut
+local SMOOTH_EASE = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
+local SMOOTH_NONE = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.Immediate
+local function GetSmoothInterpolation()
+	return (not ns.GetSmoothBars or ns.GetSmoothBars()) and SMOOTH_EASE or SMOOTH_NONE
+end
+local smoothInterpolation = GetSmoothInterpolation()
 local playerClass = UnitClassBase("player")
 local isMaxLevel = (UnitLevel("player") == GetMaxLevelForPlayerExpansion())
 
@@ -342,7 +347,8 @@ local function UpdateTargetComboPoints(self, event, _, powerType)
 		local cpGap = 2
 		if comboBar._sizedMax ~= maxCP then
 			comboBar._sizedMax = maxCP
-			local barWidth = (width - (maxCP - 1) * cpGap) / maxCP
+			local targetW = (comboBar:GetWidth() and comboBar:GetWidth() > 0) and comboBar:GetWidth() or (ns.GetSize and ns.GetSize("targetWidth") or width)
+			local barWidth = (targetW - (maxCP - 1) * cpGap) / maxCP
 			for i = 1, 10 do
 				bars[i]:SetWidth(barWidth)
 			end
@@ -500,6 +506,10 @@ local function StyleAuraButton(element, button, options)
 	end
 end
 
+local testModeActive = false
+local ApplyTestDebuffs
+local ApplyPartyDebuffPosition
+
 -- Create an oUF 14 intrinsic AuraContainer with the requested filter and layout geometry.
 local function CreateAuraWidget(self, filter, frameWidth, iconSize, spacing, growthX, growthY, extraOpts)
 	local initialAnchor = (growthY == "UP" and "BOTTOM" or "TOP") .. (growthX == "LEFT" and "RIGHT" or "LEFT")
@@ -572,6 +582,231 @@ local function CreateAuraWidget(self, filter, frameWidth, iconSize, spacing, gro
 	end
 
 	return element
+end
+
+local DISPEL_BORDER_COLORS = {
+	Magic = { 0.2, 0.6, 1.0 },
+	Curse = { 0.6, 0.0, 1.0 },
+	Disease = { 0.6, 0.4, 0.0 },
+	Poison = { 0.0, 0.6, 0.0 },
+}
+
+local TEST_DEBUFF_SAMPLES = {
+	{ spellID = 589, fallback = "Interface\\Icons\\Spell_Shadow_ShadowWordPain", dispelType = "Magic", timerText = "4", timerSecs = 4, stacks = nil, isOther = false },
+	{ spellID = 2823, fallback = "Interface\\Icons\\Spell_Nature_CorrosiveBreath", dispelType = "Poison", timerText = "9", timerSecs = 9, stacks = 3, isOther = false },
+	{ spellID = 980, fallback = "Interface\\Icons\\Spell_Shadow_CurseOfSargeras", dispelType = "Curse", timerText = "18", timerSecs = 18, stacks = nil, isOther = false },
+	{ spellID = 55078, fallback = "Interface\\Icons\\Spell_Nature_NullifyDisease", dispelType = "Disease", timerText = "42", timerSecs = 42, stacks = 2, isOther = false },
+	{ spellID = 772, fallback = "Interface\\Icons\\Ability_Gouge", dispelType = nil, timerText = "14", timerSecs = 14, stacks = nil, isOther = true },
+}
+
+local function ResolveTestIcon(spellID, fallbackPath)
+	if C_Spell and C_Spell.GetSpellTexture then
+		local tex = C_Spell.GetSpellTexture(spellID)
+		if tex then return tex end
+	elseif GetSpellTexture then
+		local tex = GetSpellTexture(spellID)
+		if tex then return tex end
+	end
+	return fallbackPath
+end
+
+local function RenderTestDebuffIcons(container, count, opts)
+	if not container then return end
+	if not testModeActive or not count or count <= 0 then
+		if container._testDebuffOverlay then
+			container._testDebuffOverlay:Hide()
+		end
+		return
+	end
+
+	local overlay = container._testDebuffOverlay
+	if not overlay then
+		overlay = CreateFrame("Frame", nil, container)
+		overlay:SetAllPoints(container)
+		overlay:SetFrameLevel(container:GetFrameLevel() + 5)
+		overlay.icons = {}
+		container._testDebuffOverlay = overlay
+	end
+
+	local iconSize = (opts and opts.size) or container.size or 19
+	local spacing = (opts and opts.spacing) or container.elementSpacing or 2
+	local growthX = (opts and opts.growthX) or "LEFT"
+	local centered = opts and opts.centered
+	local totalW = count * iconSize + (count - 1) * spacing
+	local isTarget = opts and opts.isTarget
+	local compact = (iconSize <= 15)
+
+	local fontPath = ns.GetFontPath and ns.GetFontPath() or FONT
+	local fontFlags = ns.GetFontFlags and ns.GetFontFlags() or "OUTLINE"
+	local fontOffset = ns.GetFontSizeOffset and ns.GetFontSizeOffset() or 0
+	local timerBase = math.max(8, math.floor(iconSize * 0.5))
+	local countBase = math.max(8, math.floor(iconSize * 0.42))
+
+	for i = 1, count do
+		local sample = TEST_DEBUFF_SAMPLES[((i - 1) % #TEST_DEBUFF_SAMPLES) + 1]
+		local btn = overlay.icons[i]
+		if not btn then
+			btn = CreateFrame("Frame", nil, overlay)
+
+			local ic = btn:CreateTexture(nil, "ARTWORK")
+			ic:SetAllPoints(btn)
+			ic:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+			btn.Icon = ic
+
+			local ov = btn:CreateTexture(nil, "OVERLAY", nil, 1)
+			ov:SetPoint("TOPLEFT", -2.5, 2.5)
+			ov:SetPoint("BOTTOMRIGHT", 2.5, -2.5)
+			ov:SetTexture(BORDER_TEXTURE)
+			ov:SetBlendMode("BLEND")
+			btn.ButtonOverlay = ov
+
+			local gl = btn:CreateTexture(nil, "OVERLAY", nil, 2)
+			gl:SetPoint("TOPLEFT", -3, 3)
+			gl:SetPoint("BOTTOMRIGHT", 3, -3)
+			gl:SetTexture(GLOSS_TEXTURE)
+			gl:SetVertexColor(0.84, 0.75, 0.65)
+			gl:SetBlendMode("ADD")
+			btn.ButtonGloss = gl
+
+			local tm = btn:CreateFontString(nil, "OVERLAY", nil, 7)
+			tm:SetShadowOffset(1.5, -1.5)
+			tm:SetShadowColor(0, 0, 0, 1)
+			tm:SetPoint("CENTER", btn, "CENTER", 0, 0)
+			if ns.TrackFontString then ns.TrackFontString(tm, timerBase) end
+			btn.Time = tm
+
+			local ct = btn:CreateFontString(nil, "OVERLAY", nil, 7)
+			ct:SetShadowOffset(1, -1)
+			ct:SetShadowColor(0, 0, 0, 1)
+			ct:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 1, -1)
+			if ns.TrackFontString then ns.TrackFontString(ct, countBase) end
+			btn.Count = ct
+
+			overlay.icons[i] = btn
+		end
+
+		btn:SetSize(iconSize, iconSize)
+		btn:ClearAllPoints()
+		local step = (i - 1) * (iconSize + spacing)
+		if centered then
+			local startX = -totalW / 2 + iconSize / 2
+			btn:SetPoint("CENTER", overlay, "CENTER", startX + step, 0)
+		elseif growthX == "RIGHT" then
+			btn:SetPoint("TOPLEFT", overlay, "TOPLEFT", step, 0)
+		else
+			btn:SetPoint("TOPRIGHT", overlay, "TOPRIGHT", -step, 0)
+		end
+
+		btn.Icon:SetTexture(ResolveTestIcon(sample.spellID, sample.fallback))
+		if btn.Icon.SetDesaturated then
+			btn.Icon:SetDesaturated((isTarget and sample.isOther and desaturateOtherDebuffs) and true or false)
+		end
+
+		local dispelClr = (highlightDispellableDebuffs and sample.dispelType) and DISPEL_BORDER_COLORS[sample.dispelType] or nil
+		if dispelClr then
+			btn.ButtonOverlay:SetVertexColor(dispelClr[1], dispelClr[2], dispelClr[3], 1)
+		else
+			btn.ButtonOverlay:SetVertexColor(0.31, 0.45, 0.63, 1)
+		end
+
+		if compact then
+			btn.Time:Hide()
+			btn.Count:Hide()
+		else
+			local tSz = math.max(7, timerBase + fontOffset)
+			if not btn.Time:SetFont(fontPath, tSz, fontFlags) then
+				btn.Time:SetFont("Interface\\Addons\\oUF_Brun\\textures\\Font.ttf", tSz, fontFlags)
+			end
+			btn.Time:SetText(sample.timerText)
+			if highlightExpiringAuras then
+				if sample.timerSecs <= 5 then
+					btn.Time:SetTextColor(1, 0.2, 0.2)
+				elseif sample.timerSecs <= 10 then
+					btn.Time:SetTextColor(1, 0.85, 0.1)
+				else
+					btn.Time:SetTextColor(1, 1, 1)
+				end
+			else
+				btn.Time:SetTextColor(1, 1, 1)
+			end
+			btn.Time:Show()
+
+			if sample.stacks then
+				local cSz = math.max(7, countBase + fontOffset)
+				if not btn.Count:SetFont(fontPath, cSz, fontFlags) then
+					btn.Count:SetFont("Interface\\Addons\\oUF_Brun\\textures\\Font.ttf", cSz, fontFlags)
+				end
+				btn.Count:SetText(sample.stacks)
+				btn.Count:Show()
+			else
+				btn.Count:Hide()
+			end
+		end
+
+		btn:Show()
+	end
+
+	for i = count + 1, #overlay.icons do
+		overlay.icons[i]:Hide()
+	end
+	overlay:Show()
+end
+
+ApplyTestDebuffs = function()
+	local auraOff = ns.GetAuraSizeOffset and ns.GetAuraSizeOffset() or 0
+	local pPlayerAura = math.max(10, (ns.GetSize and ns.GetSize("playerAuraSize") or 23) + auraOff)
+	local pTargetAura = math.max(10, (ns.GetSize and ns.GetSize("targetAuraSize") or 23) + auraOff)
+	local pSize = math.max(10, (ns.GetSize and ns.GetSize("partyAuraSize") or 19) + auraOff)
+	local pf = _G.oUF_player
+	if pf and pf.PlayerDebuffs then
+		RenderTestDebuffIcons(pf.PlayerDebuffs, playerShowDebuffs and 3 or 0, {
+			size = pPlayerAura,
+			spacing = playerDebuffSpacing,
+			growthX = "LEFT",
+		})
+	end
+	local tf = _G.oUF_target
+	if tf and tf.TargetDebuffs then
+		local tCount = (tf:IsShown() and targetShowDebuffs) and 4 or 0
+		RenderTestDebuffIcons(tf.TargetDebuffs, tCount, {
+			size = pTargetAura,
+			spacing = targetDebuffSpacing,
+			growthX = "RIGHT",
+			isTarget = true,
+		})
+	end
+	if ApplyPartyDebuffPosition then
+		ApplyPartyDebuffPosition(pSize)
+	end
+	local partyCounts = { 4, 2, 3, 1 }
+	for i = 1, 4 do
+		local pFrame = _G["oUF_Party" .. i]
+		if pFrame and pFrame.PartyDebuffs then
+			RenderTestDebuffIcons(pFrame.PartyDebuffs, partyShowDebuffs and partyCounts[i] or 0, {
+				size = pSize,
+				spacing = partyDebuffSpacing,
+				growthX = "RIGHT",
+			})
+		end
+	end
+	local raidUnits = {
+		{ name = "oUF_BrunRaid1UnitButton1", count = 2 },
+		{ name = "oUF_BrunRaid2UnitButton1", count = 1 },
+	}
+	for _, info in ipairs(raidUnits) do
+		local rf = _G[info.name]
+		if rf and rf.RaidDebuffs then
+			RenderTestDebuffIcons(rf.RaidDebuffs, highlightDispellableDebuffs and info.count or 0, {
+				size = 14,
+				spacing = 2,
+				growthX = "RIGHT",
+				centered = true,
+			})
+		end
+	end
+	if ns.RefreshRaidTestDummyDebuffs then
+		ns.RefreshRaidTestDummyDebuffs()
+	end
 end
 
 --===================================================--
@@ -866,8 +1101,6 @@ local function ApplyEdgeBackdrop(widget, backdropDef)
 	end
 end
 
-local testModeActive = false
-
 local function EnsureThreatBorder(frame)
 	if frame.ThreatBorder then return frame.ThreatBorder end
 	local border = CreateFrame("Frame", nil, frame, BackdropTemplateMixin and "BackdropTemplate" or nil)
@@ -1064,6 +1297,9 @@ local function UpdateTargetThreat(watcher)
 	if not threatBar then return end
 
 	if testModeActive then
+		if ApplyTestDebuffs then
+			ApplyTestDebuffs()
+		end
 		if not showTargetThreat or not (_G.oUF_target and _G.oUF_target:IsShown()) then
 			threatBar:Hide()
 			return
@@ -1180,6 +1416,8 @@ end)
 -- Out-of-Combat Frame Fader Element
 --===================================================--
 
+local RefreshFaders
+
 do
 	local fadeManager = CreateFrame("Frame")
 	local fadeFrames = {}
@@ -1242,7 +1480,7 @@ do
 
 	local function UpdateFader(self)
 		if not activeFrames[self] then return end
-		local show = ShouldFrameShow(self)
+		local show = (not enableFader) or ShouldFrameShow(self)
 		FadeFrameTo(self, show and FADE_IN_TIME or FADE_OUT_TIME, show and 1 or fadeOutAlpha)
 	end
 
@@ -1251,6 +1489,7 @@ do
 			UpdateFader(frame)
 		end
 	end
+	RefreshFaders = UpdateAllFaders
 
 	local castEvents = {
 		"UNIT_SPELLCAST_START",
@@ -1913,14 +2152,14 @@ local function ApplyThreatSettings()
 	end
 end
 
-local partySpacing = 62
+local partySpacing = 32
 local partyAnchorRef
 local partyGroupRef
 local partySpacingCombatFrame
 local pendingPartySpacingUpdate = false
 
 local function ApplyPartySpacing()
-	partySpacing = ns.GetPartySpacing and ns.GetPartySpacing() or 62
+	partySpacing = ns.GetPartySpacing and ns.GetPartySpacing() or 32
 	if not partyGroupRef then return end
 	if InCombatLockdown() then
 		pendingPartySpacingUpdate = true
@@ -1958,79 +2197,262 @@ local function ApplyPartySpacing()
 	end
 end
 
-local function ApplySavedOptions()
-	local opts = ns.GetOptionsDB()
-	enableFader = opts.enableFader
-	firstNameOnly = opts.firstNameOnly
-	ns.firstNameOnly = firstNameOnly
-	shortRaceNames = (opts.shortRaceNames ~= false)
-	ns.shortRaceNames = shortRaceNames
-	desaturateOtherDebuffs = opts.desaturateOtherDebuffs
-	enableHealthPrediction = opts.enableHealthPrediction
-	enableThreatHighlight = (opts.enableThreatHighlight ~= false)
-	threatStyle = (opts.threatStyle == "glow" or opts.threatStyle == "tint" or opts.threatStyle == "badge" or opts.threatStyle == "both") and opts.threatStyle or "backdrop"
-	showTargetThreat = (opts.showTargetThreat == true)
-	targetThreatRawPct = (opts.targetThreatRawPct == true)
-	hideSelfInfo = opts.hideSelfInfo
-	hidePartyInRaid = opts.hidePartyInRaid
-	showRaidFrames = (opts.showRaidFrames ~= false)
-	enableClickCast = (opts.enableClickCast == true)
-	showPortraits = (opts.showPortraits == true)
-	use2DPortraits = (opts.use2DPortraits == true)
-	showBossFrames = opts.showBossFrames
-	showTargetTarget = (opts.showTargetTarget ~= false)
-	showTargetTargetTarget = (opts.showTargetTargetTarget ~= false)
-	enableTotemBar = opts.enableTotemBar
-	enableSwingBar = (opts.enableSwingBar ~= false)
-	enableClassPower = (opts.enableClassPower ~= false)
-	useComboDots = (opts.useComboDots == true)
-	healthColorMode = (opts.healthColorMode == "blizzard" or opts.healthColorMode == "custom") and opts.healthColorMode or "class"
-	healthColorPlayerOnly = (opts.healthColorPlayerOnly == true)
-	hideCompactRaidManager = opts.hideCompactRaidManager
-	oUFRuneBar = opts.oUFRuneBar
-	removeBuffs = opts.removeBuffs
-	playerCastBar = opts.playerCastBar
-	targetCastBar = opts.targetCastBar
-	focusCastBar = opts.focusCastBar
-	playerShowBuffs = (opts.playerShowBuffs ~= false)
-	playerShowDebuffs = opts.playerShowDebuffs
-	targetShowBuffs = opts.targetShowBuffs
-	targetShowDebuffs = opts.targetShowDebuffs
-	focusShowBuffs = opts.focusShowBuffs
-	focusShowDebuffs = opts.focusShowDebuffs
-	partyShowBuffs = opts.partyShowBuffs
-	partyShowDebuffs = opts.partyShowDebuffs
-	highlightExpiringAuras = (opts.highlightExpiringAuras ~= false) and (opts.enlargeLowDurationBuffs ~= false)
-	highlightDispellableDebuffs = (opts.highlightDispellableDebuffs ~= false)
+do
+	local combatFrame
+	local pending = false
+	local savedSizeOverride
 
-	if ns.SetMinimapButtonShown then
-		ns.SetMinimapButtonShown(opts.showMinimapIcon ~= false)
-	end
-
-	if removeBuffs then
-		if BuffFrame then
-			BuffFrame:UnregisterAllEvents()
-			BuffFrame:Hide()
+	ApplyPartyDebuffPosition = function(sizeOverride)
+		savedSizeOverride = sizeOverride or savedSizeOverride
+		if InCombatLockdown() then
+			pending = true
+			if not combatFrame then
+				combatFrame = CreateFrame("Frame")
+				combatFrame:SetScript("OnEvent", function(f)
+					f:UnregisterAllEvents()
+					if pending then
+						pending = false
+						ApplyPartyDebuffPosition(savedSizeOverride)
+					end
+				end)
+			end
+			combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+			return
 		end
-		if TemporaryEnchantFrame then
-			TemporaryEnchantFrame:UnregisterAllEvents()
-			TemporaryEnchantFrame:Hide()
+		pending = false
+		local pos = ns.GetPartyDebuffPosition and ns.GetPartyDebuffPosition() or "right"
+		local size = sizeOverride or partyDebuffSize
+		local yOff = math.max(0, math.floor((partyHeight - size) / 2))
+		for i = 1, 4 do
+			local pFrame = _G["oUF_Party" .. i]
+			if pFrame and pFrame.PartyDebuffs then
+				pFrame.PartyDebuffs:ClearAllPoints()
+				if pos == "below" then
+					pFrame.PartyDebuffs:SetPoint("TOPLEFT", pFrame, "BOTTOMLEFT", 0, -4)
+				else
+					pFrame.PartyDebuffs:SetPoint("TOPLEFT", pFrame, "TOPRIGHT", 8, -yOff)
+				end
+			end
 		end
 	end
+end
 
-	if UpdateAllClickCastFrames then
-		UpdateAllClickCastFrames()
+local bossSpacing = 48
+local bossAnchorRef
+local bossSpacingCombatFrame
+local pendingBossSpacingUpdate = false
+
+local function ApplyBossSpacing()
+	bossSpacing = ns.GetBossSpacing and ns.GetBossSpacing() or 48
+	if not bossAnchorRef or not MAX_BOSS_FRAMES then return end
+	if InCombatLockdown() then
+		pendingBossSpacingUpdate = true
+		if not bossSpacingCombatFrame then
+			bossSpacingCombatFrame = CreateFrame("Frame")
+			bossSpacingCombatFrame:SetScript("OnEvent", function(f)
+				f:UnregisterAllEvents()
+				if pendingBossSpacingUpdate then
+					pendingBossSpacingUpdate = false
+					ApplyBossSpacing()
+				end
+			end)
+		end
+		bossSpacingCombatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+		return
 	end
-	if ns.UpdateBlizzardRaidFramesVisibility then
-		ns.UpdateBlizzardRaidFramesVisibility()
+	pendingBossSpacingUpdate = false
+	local bW = ns.GetSize and ns.GetSize("bossWidth") or partyWidth
+	local bH = ns.GetSize and ns.GetSize("bossHeight") or partyHeight
+	local bossGroupHeight = MAX_BOSS_FRAMES * bH + (MAX_BOSS_FRAMES - 1) * bossSpacing
+	bossAnchorRef:SetSize(bW, bossGroupHeight)
+	local prevBoss
+	for i = 1, MAX_BOSS_FRAMES do
+		local boss = _G["oUF_Boss" .. i]
+		if boss then
+			boss:ClearAllPoints()
+			if prevBoss then
+				boss:SetPoint("TOPRIGHT", prevBoss, "BOTTOMRIGHT", 0, -bossSpacing)
+			else
+				boss:SetPoint("TOPRIGHT", bossAnchorRef, "TOPRIGHT", 0, 0)
+			end
+			prevBoss = boss
+		end
 	end
-	ApplyHealthColors()
-	ApplyThreatSettings()
-	ApplyPartySpacing()
-	TEXTURE = ns.GetStatusBarTexture and ns.GetStatusBarTexture() or TEXTURE
-	FONT = ns.GetFontPath and ns.GetFontPath() or FONT
-	if ns.ApplyMedia then
-		ns.ApplyMedia()
+end
+
+local function ApplyFaderSettings()
+	fadeOutAlpha = ns.GetFadeOutAlpha and ns.GetFadeOutAlpha() or 0.35
+	for _, name in ipairs({ "oUF_player", "oUF_Pet" }) do
+		local frame = _G[name]
+		if frame then
+			frame.fade = enableFader
+			if enableFader then
+				if frame.EnableElement then frame:EnableElement("BrunFader") end
+			else
+				if frame.DisableElement then frame:DisableElement("BrunFader") end
+			end
+		end
+	end
+	if RefreshFaders then
+		RefreshFaders()
+	end
+end
+
+local function ApplyRangeAlpha()
+	local alpha = ns.GetRangeAlpha and ns.GetRangeAlpha() or 0.45
+	if oUF and oUF.objects then
+		for _, obj in ipairs(oUF.objects) do
+			if obj.Range then
+				obj.Range.outsideAlpha = alpha
+				if obj.Range.ForceUpdate then
+					obj.Range:ForceUpdate()
+				end
+			end
+		end
+	end
+	if ns.RefreshRaidTestDummyRange then
+		ns.RefreshRaidTestDummyRange(alpha)
+	end
+end
+
+local function ApplySmoothBars()
+	smoothInterpolation = GetSmoothInterpolation()
+	ns.smoothInterpolation = smoothInterpolation
+	if oUF and oUF.objects then
+		for _, obj in ipairs(oUF.objects) do
+			if obj.Health then obj.Health.smoothing = smoothInterpolation end
+			if obj.Power then obj.Power.smoothing = smoothInterpolation end
+			if obj.Castbar then obj.Castbar.smoothing = smoothInterpolation end
+			if obj.AdditionalPower then obj.AdditionalPower.smoothing = smoothInterpolation end
+		end
+	end
+end
+
+local ApplySavedOptions
+do
+	local function SyncCoreOptions(opts)
+		enableFader = (opts.enableFader ~= false)
+		fadeOutAlpha = ns.GetFadeOutAlpha and ns.GetFadeOutAlpha() or 0.35
+		firstNameOnly = opts.firstNameOnly
+		ns.firstNameOnly = firstNameOnly
+		shortRaceNames = (opts.shortRaceNames ~= false)
+		ns.shortRaceNames = shortRaceNames
+		desaturateOtherDebuffs = opts.desaturateOtherDebuffs
+		enableHealthPrediction = opts.enableHealthPrediction
+		enableThreatHighlight = (opts.enableThreatHighlight ~= false)
+		threatStyle = (opts.threatStyle == "glow" or opts.threatStyle == "tint" or opts.threatStyle == "badge" or opts.threatStyle == "both") and opts.threatStyle or "backdrop"
+		showTargetThreat = (opts.showTargetThreat == true)
+		targetThreatRawPct = (opts.targetThreatRawPct == true)
+		hideSelfInfo = opts.hideSelfInfo
+		hidePartyInRaid = opts.hidePartyInRaid
+		showRaidFrames = (opts.showRaidFrames ~= false)
+		enableClickCast = (opts.enableClickCast == true)
+		showPortraits = (opts.showPortraits == true)
+		use2DPortraits = (opts.use2DPortraits == true)
+		showBossFrames = opts.showBossFrames
+		showTargetTarget = (opts.showTargetTarget ~= false)
+		showTargetTargetTarget = (opts.showTargetTargetTarget ~= false)
+		enableTotemBar = opts.enableTotemBar
+		enableSwingBar = (opts.enableSwingBar ~= false)
+		enableClassPower = (opts.enableClassPower ~= false)
+		useComboDots = (opts.useComboDots == true)
+		healthColorMode = (opts.healthColorMode == "blizzard" or opts.healthColorMode == "custom") and opts.healthColorMode or "class"
+		healthColorPlayerOnly = (opts.healthColorPlayerOnly == true)
+		hideCompactRaidManager = opts.hideCompactRaidManager
+		oUFRuneBar = opts.oUFRuneBar
+		removeBuffs = opts.removeBuffs
+	end
+
+	local function SyncAuraCastOptions(opts)
+		playerCastBar = opts.playerCastBar
+		targetCastBar = opts.targetCastBar
+		focusCastBar = opts.focusCastBar
+		petCastBar = (opts.petCastBar ~= false)
+		playerShowBuffs = (opts.playerShowBuffs ~= false)
+		playerShowDebuffs = opts.playerShowDebuffs
+		targetShowBuffs = opts.targetShowBuffs
+		targetShowDebuffs = opts.targetShowDebuffs
+		focusShowBuffs = opts.focusShowBuffs
+		focusShowDebuffs = opts.focusShowDebuffs
+		partyShowBuffs = opts.partyShowBuffs
+		partyShowDebuffs = opts.partyShowDebuffs
+		petShowAura = (opts.petShowAura ~= false)
+		local auraOff = ns.GetAuraSizeOffset and ns.GetAuraSizeOffset() or 0
+		local pAuraBase = ns.GetSize and ns.GetSize("playerAuraSize") or 23
+		local tAuraBase = ns.GetSize and ns.GetSize("targetAuraSize") or 23
+		local fAuraBase = ns.GetSize and ns.GetSize("focusAuraSize") or 20
+		local gAuraBase = ns.GetSize and ns.GetSize("partyAuraSize") or 19
+		playerBuffsSize = math.max(10, pAuraBase + auraOff)
+		playerDebuffSize = math.max(10, pAuraBase + auraOff)
+		targetBuffSize = math.max(10, tAuraBase + auraOff)
+		targetDebuffSize = math.max(10, tAuraBase + auraOff)
+		focusBuffSize = math.max(10, fAuraBase + auraOff)
+		focusDebuffSize = math.max(10, fAuraBase + auraOff)
+		partyBuffSize = math.max(10, gAuraBase + auraOff)
+		partyDebuffSize = math.max(10, gAuraBase + auraOff)
+		highlightExpiringAuras = (opts.highlightExpiringAuras ~= false) and (opts.enlargeLowDurationBuffs ~= false)
+		highlightDispellableDebuffs = (opts.highlightDispellableDebuffs ~= false)
+	end
+
+	local function SyncFrameSizes()
+		if not ns.GetSize then return end
+		width = ns.GetSize("playerWidth")
+		height = ns.GetSize("playerHeight")
+		partyWidth = ns.GetSize("partyWidth")
+		partyHeight = ns.GetSize("partyHeight")
+		focusWidth = ns.GetSize("focusWidth")
+		focusHeight = ns.GetSize("focusHeight")
+		targetTargetWidth = ns.GetSize("totWidth")
+		targetTargetHeight = ns.GetSize("totHeight")
+		petWidth = ns.GetSize("petWidth")
+		petHeight = ns.GetSize("petHeight")
+		raidWidth = ns.GetSize("raidWidth")
+		raidHeight = ns.GetSize("raidHeight")
+		ns.raidWidth = raidWidth
+		ns.raidHeight = raidHeight
+	end
+
+	ApplySavedOptions = function()
+		local opts = ns.GetOptionsDB()
+		SyncCoreOptions(opts)
+		SyncAuraCastOptions(opts)
+		SyncFrameSizes()
+
+		if ns.SetMinimapButtonShown then
+			ns.SetMinimapButtonShown(opts.showMinimapIcon ~= false)
+		end
+
+		if opts.removeBuffs then
+			if BuffFrame then
+				BuffFrame:UnregisterAllEvents()
+				BuffFrame:Hide()
+			end
+			if TemporaryEnchantFrame then
+				TemporaryEnchantFrame:UnregisterAllEvents()
+				TemporaryEnchantFrame:Hide()
+			end
+		end
+
+		if UpdateAllClickCastFrames then
+			UpdateAllClickCastFrames()
+		end
+		if ns.UpdateBlizzardRaidFramesVisibility then
+			ns.UpdateBlizzardRaidFramesVisibility()
+		end
+		ApplyHealthColors()
+		ApplyThreatSettings()
+		ApplyPartySpacing()
+		ApplyPartyDebuffPosition()
+		ApplyBossSpacing()
+		ApplyFaderSettings()
+		ApplyRangeAlpha()
+		ApplySmoothBars()
+		ApplyTestDebuffs()
+		TEXTURE = ns.GetStatusBarTexture and ns.GetStatusBarTexture() or TEXTURE
+		FONT = ns.GetFontPath and ns.GetFontPath() or FONT
+		if ns.ApplyMedia then
+			ns.ApplyMedia()
+		end
 	end
 end
 
@@ -2183,6 +2605,7 @@ local function ToggleTestFrames(forceOff)
 	end
 
 	ApplyThreatSettings()
+	ApplyTestDebuffs()
 
 	if ns.UpdateTestBtnState then
 		ns.UpdateTestBtnState()
@@ -2348,7 +2771,8 @@ local function CreateSwingBars(self)
 		return
 	end
 
-	local swingWidth, swingHeight = 180, 10
+	local swingWidth = ns.GetSize and ns.GetSize("swingWidth") or 180
+	local swingHeight = ns.GetSize and ns.GetSize("swingHeight") or 10
 	local swingAnchor = CreatePositionAnchor("Swing", swingWidth, swingHeight, oUF_Brun.Swing)
 	local fontSize = math.max(8, SMALL_FONT_SIZE - 2)
 	local direction = Enum.StatusBarTimerDirection and Enum.StatusBarTimerDirection.ElapsedTime
@@ -2406,8 +2830,9 @@ end
 --===================================================--
 
 local function CreatePortrait(self, side)
+	local pSize = (self:GetHeight() and self:GetHeight() > 0) and self:GetHeight() or height
 	local holder = CreateFrame("Frame", nil, self)
-	holder:SetSize(height, height)
+	holder:SetSize(pSize, pSize)
 	ApplyBackdrop(holder)
 	if side == "LEFT" then
 		holder:SetPoint("TOPRIGHT", self, "TOPLEFT", -5, 0)
@@ -2827,7 +3252,7 @@ local UnitSpecific = {
 			else
 				local comboBar = CreateFrame("Frame", nil, self)
 				comboBar:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -3)
-				comboBar:SetSize(width, 7)
+				comboBar:SetSize(ns.GetSize and ns.GetSize("targetWidth") or width, 7)
 				ApplyBackdrop(comboBar)
 				comboBar:Hide()
 				self.ComboPowerBar = comboBar
@@ -2897,12 +3322,13 @@ local UnitSpecific = {
 		if targetCastBar then
 			CreateCastbar(self, pp, -2, false)
 		end
+		local tW = ns.GetSize and ns.GetSize("targetWidth") or width
 		if targetShowBuffs then
-			local buffs = CreateAuraWidget(self, "HELPFUL", width, targetBuffSize, targetBuffSpacing, "LEFT", "UP")
+			local buffs = CreateAuraWidget(self, "HELPFUL", tW, targetBuffSize, targetBuffSpacing, "LEFT", "UP")
 			buffs:SetPoint("BOTTOMRIGHT", hp, "TOPRIGHT", 0, 4)
 		end
 		if targetShowDebuffs then
-			local debuffs = CreateAuraWidget(self, "TARGET_DEBUFFS", width, targetDebuffSize, targetDebuffSpacing, "RIGHT", "DOWN")
+			local debuffs = CreateAuraWidget(self, "TARGET_DEBUFFS", tW, targetDebuffSize, targetDebuffSpacing, "RIGHT", "DOWN")
 			debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -EXPREPBARGAP)
 			self.TargetDebuffs = debuffs
 		end
@@ -2957,13 +3383,20 @@ local UnitSpecific = {
 	party = function(self)
 		RegisterClickCastFrame(self)
 		local hp = self.Health
+		local debuffPos = ns.GetPartyDebuffPosition and ns.GetPartyDebuffPosition() or "right"
 		if partyShowBuffs then
 			local buffs = CreateAuraWidget(self, "HELPFUL", partyWidth, partyBuffSize, partyBuffSpacing, "RIGHT", "UP")
 			buffs:SetPoint("BOTTOMLEFT", self, "TOPLEFT", 0, 4)
 		end
 		if partyShowDebuffs then
-			local debuffs = CreateAuraWidget(self, "HARMFUL", partyWidth, partyDebuffSize, partyDebuffSpacing, "LEFT", "DOWN")
-			debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -4)
+			local debuffs = CreateAuraWidget(self, "HARMFUL", partyWidth, partyDebuffSize, partyDebuffSpacing, "RIGHT", "DOWN")
+			if debuffPos == "below" then
+				debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -4)
+			else
+				local yOff = math.max(0, math.floor((partyHeight - partyDebuffSize) / 2))
+				debuffs:SetPoint("TOPLEFT", self, "TOPRIGHT", 8, -yOff)
+			end
+			self.PartyDebuffs = debuffs
 		end
 
 		local lfdrole = hp:CreateTexture(nil, "OVERLAY")
@@ -2986,7 +3419,11 @@ local UnitSpecific = {
 		summon:SetPoint("CENTER")
 		self.SummonIndicator = summon
 
-		CreatePrivateAuras(self, 18, "LEFT", self, "RIGHT", 6, 0, "RIGHT")
+		if partyShowDebuffs and debuffPos == "right" then
+			CreatePrivateAuras(self, 18, "TOPLEFT", self, "BOTTOMLEFT", 0, -4, "RIGHT")
+		else
+			CreatePrivateAuras(self, 18, "LEFT", self, "RIGHT", 6, 0, "RIGHT")
+		end
 	end,
 
 	focus = function(self)
@@ -3004,10 +3441,11 @@ local UnitSpecific = {
 	end,
 
 	boss = function(self)
+		local bW = ns.GetSize and ns.GetSize("bossWidth") or partyWidth
 		CreateCastbar(self, self.Power, -2, false)
-		local buffs = CreateAuraWidget(self, "HELPFUL", partyWidth, partyBuffSize, partyBuffSpacing, "LEFT", "UP")
+		local buffs = CreateAuraWidget(self, "HELPFUL", bW, partyBuffSize, partyBuffSpacing, "LEFT", "UP")
 		buffs:SetPoint("BOTTOMRIGHT", self.Health, "TOPRIGHT", 0, 4)
-		local debuffs = CreateAuraWidget(self, "TARGET_DEBUFFS", partyWidth, partyDebuffSize, partyDebuffSpacing, "RIGHT", "DOWN")
+		local debuffs = CreateAuraWidget(self, "TARGET_DEBUFFS", bW, partyDebuffSize, partyDebuffSpacing, "RIGHT", "DOWN")
 		debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -18)
 	end,
 }
@@ -3024,6 +3462,10 @@ local function Shared(self, unit, isSingle)
 	if unit == "focustarget" then
 		frameWidth, frameHeight = partyPetAndTargetWidth + 30, focusHeight
 		hpHeight = focusHeight * 0.6
+	elseif unit == "target" then
+		frameWidth = ns.GetSize and ns.GetSize("targetWidth") or width
+		frameHeight = ns.GetSize and ns.GetSize("targetHeight") or height
+		hpHeight = frameHeight * 0.6
 	elseif isTargetTarget then
 		frameWidth, frameHeight = targetTargetWidth, targetTargetHeight
 		hpHeight = targetTargetHeight * 0.6
@@ -3035,9 +3477,13 @@ local function Shared(self, unit, isSingle)
 		hpHeight = focusHeight * 0.6
 	elseif isPartySubUnit then
 		hpHeight = partyPetAndTargetHeight
-	elseif unit == "party" or unit == "boss" then
+	elseif unit == "party" then
 		frameWidth, frameHeight = partyWidth, partyHeight
 		hpHeight = partyHeight * 0.6
+	elseif unit == "boss" then
+		frameWidth = ns.GetSize and ns.GetSize("bossWidth") or partyWidth
+		frameHeight = ns.GetSize and ns.GetSize("bossHeight") or partyHeight
+		hpHeight = frameHeight * 0.6
 	end
 
 	self:SetScript("OnEnter", UnitFrameOnEnter)
@@ -3049,7 +3495,7 @@ local function Shared(self, unit, isSingle)
 	if (unit == "party" or unit == "raid" or not isSingle) and unit ~= "partytarget" then
 		self.Range = {
 			insideAlpha = 1,
-			outsideAlpha = 0.45,
+			outsideAlpha = ns.GetRangeAlpha and ns.GetRangeAlpha() or 0.45,
 		}
 	end
 
@@ -3256,6 +3702,8 @@ ns.UnitFrameOnEnter = UnitFrameOnEnter
 ns.UnitFrameOnLeave = UnitFrameOnLeave
 ns.CreateHealthPrediction = CreateHealthPrediction
 ns.CreateAuraWidget = CreateAuraWidget
+ns.RenderTestDebuffIcons = RenderTestDebuffIcons
+ns.ApplyTestDebuffs = ApplyTestDebuffs
 ns.CreatePositionAnchor = CreatePositionAnchor
 ns.RegisterClickCastFrame = RegisterClickCastFrame
 ns.GetClickCastBindings = GetClickCastBindingsList
@@ -3265,6 +3713,11 @@ ns.GetPlayerSpellbookSpells = GetPlayerSpellbookSpells
 ns.GetClickCastSummary = GetClickCastSummary
 ns.ApplySavedOptions = ApplySavedOptions
 ns.ApplyPartySpacing = ApplyPartySpacing
+ns.ApplyPartyDebuffPosition = ApplyPartyDebuffPosition
+ns.ApplyBossSpacing = ApplyBossSpacing
+ns.ApplyFaderSettings = ApplyFaderSettings
+ns.ApplyRangeAlpha = ApplyRangeAlpha
+ns.ApplySmoothBars = ApplySmoothBars
 ns.ApplyHealthColors = ApplyHealthColors
 ns.GetHealthColorMode = function() return healthColorMode end
 ns.UseClassHealthColor = function() return (healthColorMode ~= "blizzard") or healthColorPlayerOnly end
@@ -3334,7 +3787,9 @@ local function SpawnFrames(self)
 	local playerAnchor = CreatePositionAnchor("Player", width, height, oUF_Brun.Player)
 	self:Spawn("player", "oUF_player"):SetPoint("CENTER", playerAnchor, "CENTER", 0, 0)
 
-	local targetAnchor = CreatePositionAnchor("Target", width, height, oUF_Brun.Target)
+	local targetW = ns.GetSize and ns.GetSize("targetWidth") or width
+	local targetH = ns.GetSize and ns.GetSize("targetHeight") or height
+	local targetAnchor = CreatePositionAnchor("Target", targetW, targetH, oUF_Brun.Target)
 	self:Spawn("target", "oUF_target"):SetPoint("CENTER", targetAnchor, "CENTER", 0, 0)
 
 	if showTargetTarget then
@@ -3358,13 +3813,17 @@ local function SpawnFrames(self)
 	self:Spawn("pet", "oUF_Pet"):SetPoint("CENTER", petAnchor, "CENTER", 0, 0)
 
 	if showBossFrames and MAX_BOSS_FRAMES then
-		local bossGroupHeight = MAX_BOSS_FRAMES * partyHeight + (MAX_BOSS_FRAMES - 1) * 48
-		local bossAnchor = CreatePositionAnchor("Boss", partyWidth, bossGroupHeight, oUF_Brun.Boss)
+		bossSpacing = ns.GetBossSpacing and ns.GetBossSpacing() or 48
+		local bossW = ns.GetSize and ns.GetSize("bossWidth") or partyWidth
+		local bossH = ns.GetSize and ns.GetSize("bossHeight") or partyHeight
+		local bossGroupHeight = MAX_BOSS_FRAMES * bossH + (MAX_BOSS_FRAMES - 1) * bossSpacing
+		local bossAnchor = CreatePositionAnchor("Boss", bossW, bossGroupHeight, oUF_Brun.Boss)
+		bossAnchorRef = bossAnchor
 		local prevBoss
 		for i = 1, MAX_BOSS_FRAMES do
 			local boss = self:Spawn("boss" .. i, "oUF_Boss" .. i)
 			if prevBoss then
-				boss:SetPoint("TOPRIGHT", prevBoss, "BOTTOMRIGHT", 0, -48)
+				boss:SetPoint("TOPRIGHT", prevBoss, "BOTTOMRIGHT", 0, -bossSpacing)
 			else
 				boss:SetPoint("TOPRIGHT", bossAnchor, "TOPRIGHT", 0, 0)
 			end
@@ -3381,7 +3840,7 @@ local function SpawnFrames(self)
 		RuneFrame:Show()
 	end
 
-	partySpacing = ns.GetPartySpacing and ns.GetPartySpacing() or 62
+	partySpacing = ns.GetPartySpacing and ns.GetPartySpacing() or 32
 	local partyGroupHeight = partyHeight * 4 + partySpacing * 3
 	local partyGroup = CreateFrame("Frame", "oUF_BrunPartyGroup", UIParent, "SecureHandlerStateTemplate")
 	local partyAnchor = CreatePositionAnchor("Party", partyWidth, partyGroupHeight, oUF_Brun.Party)
