@@ -76,6 +76,12 @@ function ns.GetClassColorsDB()
 	return oUF_BrunDB.ClassColors
 end
 
+function ns.GetClickCastDB()
+	if type(oUF_BrunDB) ~= "table" then oUF_BrunDB = {} end
+	if type(oUF_BrunDB.ClickCast) ~= "table" then oUF_BrunDB.ClickCast = {} end
+	return oUF_BrunDB.ClickCast
+end
+
 function ns.GetOptionsDB()
 	if type(oUF_BrunDB) ~= "table" then oUF_BrunDB = {} end
 	if type(oUF_BrunDB.Options) ~= "table" then oUF_BrunDB.Options = {} end
@@ -345,7 +351,10 @@ local TAB_OPTION_KEYS = {
 		"desaturateOtherDebuffs", "highlightDispellableDebuffs", "highlightExpiringAuras",
 	},
 	group = {
-		"showRaidFrames", "hidePartyInRaid", "hideCompactRaidManager", "partySpacing", "enableClickCast",
+		"showRaidFrames", "hidePartyInRaid", "hideCompactRaidManager", "partySpacing",
+	},
+	clickcast = {
+		"enableClickCast",
 	},
 	colors = {
 		"healthColorMode", "healthColorPlayerOnly",
@@ -359,10 +368,16 @@ local TAB_OPTION_KEYS = {
 }
 
 local configFrame
+local pendingCustomSpellCallback
+local pendingCustomSpellInitial
+
+local function GetStaticPopupEditBox(dialog)
+	return dialog.editBox or (dialog.GetEditBox and dialog:GetEditBox()) or _G[dialog:GetName() .. "EditBox"]
+end
 
 if StaticPopupDialogs then
 	StaticPopupDialogs["OUF_BRUN_RESET_ALL"] = {
-		text = "|cffff8000oUF_Brun|r\n\nReset ALL settings across every tab, custom class colors, and frame positions back to defaults?",
+		text = "|cffff8000oUF_Brun|r\n\nReset ALL settings across every tab, custom class colors, click-cast bindings, and frame positions back to defaults?",
 		button1 = YES or "Yes",
 		button2 = CANCEL or "Cancel",
 		OnAccept = function()
@@ -377,6 +392,62 @@ if StaticPopupDialogs then
 		hideOnEscape = true,
 		preferredIndex = 3,
 	}
+
+	StaticPopupDialogs["OUF_BRUN_CLICKCAST_SPELL"] = {
+		text = "|cffff8000oUF_Brun|r\n\nEnter exact spell or macro spell name for this click binding:",
+		button1 = ACCEPT or "Accept",
+		button2 = CANCEL or "Cancel",
+		hasEditBox = true,
+		maxLetters = 80,
+		OnShow = function(self)
+			local eb = GetStaticPopupEditBox(self)
+			if eb then
+				eb:SetText(pendingCustomSpellInitial or "")
+				eb:SetFocus()
+				eb:HighlightText()
+			end
+		end,
+		OnAccept = function(self)
+			local eb = GetStaticPopupEditBox(self)
+			local text = eb and eb:GetText() or ""
+			local trimmed = text:match("^%s*(.-)%s*$") or ""
+			if pendingCustomSpellCallback then
+				local cb = pendingCustomSpellCallback
+				pendingCustomSpellCallback = nil
+				pendingCustomSpellInitial = nil
+				cb(trimmed)
+			end
+		end,
+		OnCancel = function()
+			pendingCustomSpellCallback = nil
+			pendingCustomSpellInitial = nil
+		end,
+		EditBoxOnEnterPressed = function(self)
+			local parent = self:GetParent()
+			local eb = GetStaticPopupEditBox(parent)
+			local text = eb and eb:GetText() or ""
+			local trimmed = text:match("^%s*(.-)%s*$") or ""
+			if pendingCustomSpellCallback then
+				local cb = pendingCustomSpellCallback
+				pendingCustomSpellCallback = nil
+				pendingCustomSpellInitial = nil
+				cb(trimmed)
+			end
+			parent:Hide()
+		end,
+		timeout = 0,
+		whileDead = true,
+		hideOnEscape = true,
+		preferredIndex = 3,
+	}
+end
+
+local function OpenCustomSpellPopup(initialText, onAccept)
+	if not StaticPopup_Show then return end
+	pendingCustomSpellInitial = initialText or ""
+	pendingCustomSpellCallback = onAccept
+	local popup = StaticPopup_Show("OUF_BRUN_CLICKCAST_SPELL")
+	if popup then popup:Raise() end
 end
 
 local FLAT_BACKDROP = {
@@ -889,6 +960,7 @@ function ns.ToggleConfigGUI()
 	mediaDropdown:SetFrameLevel(dropdownCloseOverlay:GetFrameLevel() + 2)
 	mediaDropdown:EnableMouse(true)
 	mediaDropdown:EnableMouseWheel(true)
+	mediaDropdown:SetClampedToScreen(true)
 	StyleFlatBox(mediaDropdown, 0.05, 0.05, 0.07, 0.98, 0.34, 0.34, 0.42, 1)
 
 	local VISIBLE_ROWS = 9
@@ -899,6 +971,7 @@ function ns.ToggleConfigGUI()
 	local dropdownOnSelect = nil
 	local dropdownAnchor = nil
 	local dropdownRows = {}
+	local choiceDropdown
 
 	local scrollTrack = mediaDropdown:CreateTexture(nil, "BORDER")
 	scrollTrack:SetPoint("TOPRIGHT", -4, -6)
@@ -911,6 +984,10 @@ function ns.ToggleConfigGUI()
 	scrollThumb:SetColorTexture(1, 0.55, 0.1, 0.85)
 
 	local function CloseMediaDropdown()
+		mediaDropdown:Hide()
+		if choiceDropdown then
+			choiceDropdown:Hide()
+		end
 		dropdownCloseOverlay:Hide()
 		dropdownAnchor = nil
 	end
@@ -1034,15 +1111,156 @@ function ns.ToggleConfigGUI()
 		mediaDropdown:ClearAllPoints()
 		mediaDropdown:SetPoint("TOPLEFT", anchorBtn, "BOTTOMLEFT", 0, -2)
 		RefreshMediaDropdownRows()
+		if choiceDropdown then choiceDropdown:Hide() end
+		mediaDropdown:Show()
 		dropdownCloseOverlay:Show()
 	end
 
-	-- Build 7 category pages
+	-- Generic scrollable dropdown for Click-Cast modifiers, mouse buttons & spells
+	choiceDropdown = CreateFrame("Frame", nil, dropdownCloseOverlay, BackdropTemplateMixin and "BackdropTemplate" or nil)
+	choiceDropdown:SetSize(200, 208)
+	choiceDropdown:SetFrameLevel(dropdownCloseOverlay:GetFrameLevel() + 2)
+	choiceDropdown:EnableMouse(true)
+	choiceDropdown:EnableMouseWheel(true)
+	choiceDropdown:SetClampedToScreen(true)
+	choiceDropdown:Hide()
+	StyleFlatBox(choiceDropdown, 0.05, 0.05, 0.07, 0.98, 0.34, 0.34, 0.42, 1)
+
+	local choiceItems = {}
+	local choiceOffset = 0
+	local choiceSelectedVal = nil
+	local choiceOnSelect = nil
+	local choiceRows = {}
+
+	local choiceScrollTrack = choiceDropdown:CreateTexture(nil, "BORDER")
+	choiceScrollTrack:SetPoint("TOPRIGHT", -4, -6)
+	choiceScrollTrack:SetPoint("BOTTOMRIGHT", -4, 6)
+	choiceScrollTrack:SetWidth(3)
+	choiceScrollTrack:SetColorTexture(1, 1, 1, 0.08)
+
+	local choiceScrollThumb = choiceDropdown:CreateTexture(nil, "ARTWORK")
+	choiceScrollThumb:SetWidth(3)
+	choiceScrollThumb:SetColorTexture(1, 0.55, 0.1, 0.85)
+
+	local function RefreshChoiceDropdownRows()
+		local total = #choiceItems
+		local maxOff = math.max(0, total - VISIBLE_ROWS)
+		choiceOffset = math.max(0, math.min(choiceOffset, maxOff))
+
+		local showScroll = (total > VISIBLE_ROWS)
+		choiceScrollTrack:SetShown(showScroll)
+		choiceScrollThumb:SetShown(showScroll)
+		if showScroll then
+			local trackH = 196
+			local thumbH = math.max(18, math.floor(trackH * (VISIBLE_ROWS / total)))
+			local travel = trackH - thumbH
+			local ratio = (maxOff > 0) and (choiceOffset / maxOff) or 0
+			choiceScrollThumb:ClearAllPoints()
+			choiceScrollThumb:SetHeight(thumbH)
+			choiceScrollThumb:SetPoint("TOPRIGHT", choiceDropdown, "TOPRIGHT", -4, -(6 + ratio * travel))
+		end
+
+		for i = 1, VISIBLE_ROWS do
+			local row = choiceRows[i]
+			local item = choiceItems[choiceOffset + i]
+			if item then
+				row._value = item.value
+				local isSelected = (choiceSelectedVal ~= nil and item.value == choiceSelectedVal)
+				row.activeBg:SetShown(isSelected)
+				row.label:SetText(item.label or "")
+				if isSelected then
+					row.label:SetTextColor(1, 0.84, 0.45)
+				elseif item.r and item.g and item.b then
+					row.label:SetTextColor(item.r, item.g, item.b)
+				else
+					row.label:SetTextColor(0.92, 0.92, 0.95)
+				end
+				row:Show()
+			else
+				row._value = nil
+				row:Hide()
+			end
+		end
+	end
+
+	for i = 1, VISIBLE_ROWS do
+		local row = CreateFrame("Button", nil, choiceDropdown)
+		row:SetPoint("TOPLEFT", 5, -(5 + (i - 1) * 22))
+		row:SetPoint("TOPRIGHT", -11, -(5 + (i - 1) * 22))
+		row:SetHeight(21)
+
+		local activeBg = row:CreateTexture(nil, "BORDER")
+		activeBg:SetAllPoints()
+		activeBg:SetColorTexture(1, 0.5, 0, 0.22)
+		activeBg:Hide()
+		row.activeBg = activeBg
+
+		local hoverBg = row:CreateTexture(nil, "BORDER")
+		hoverBg:SetAllPoints()
+		hoverBg:SetColorTexture(1, 1, 1, 0.08)
+		hoverBg:Hide()
+
+		local label = row:CreateFontString(nil, "OVERLAY")
+		label:SetPoint("LEFT", 6, 0)
+		label:SetPoint("RIGHT", -6, 0)
+		label:SetJustifyH("LEFT")
+		label:SetWordWrap(false)
+		label:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		row.label = label
+
+		row:SetScript("OnEnter", function() hoverBg:Show() end)
+		row:SetScript("OnLeave", function() hoverBg:Hide() end)
+		row:SetScript("OnClick", function(self)
+			if self._value ~= nil and choiceOnSelect then
+				local val = self._value
+				local cb = choiceOnSelect
+				CloseMediaDropdown()
+				cb(val)
+			end
+		end)
+		choiceRows[i] = row
+	end
+
+	choiceDropdown:SetScript("OnMouseWheel", function(_, delta)
+		choiceOffset = choiceOffset - (delta > 0 and 2 or -2)
+		RefreshChoiceDropdownRows()
+	end)
+
+	local function OpenChoiceDropdown(anchorBtn, items, currentValue, dropWidth, onSelect)
+		if dropdownCloseOverlay:IsShown() and dropdownAnchor == anchorBtn then
+			CloseMediaDropdown()
+			return
+		end
+		dropdownAnchor = anchorBtn
+		choiceItems = items or {}
+		choiceSelectedVal = currentValue
+		choiceOnSelect = onSelect
+		choiceOffset = 0
+		if currentValue ~= nil then
+			for idx, item in ipairs(choiceItems) do
+				if item.value == currentValue then
+					choiceOffset = math.max(0, idx - 4)
+					break
+				end
+			end
+		end
+		local listH = math.min(VISIBLE_ROWS, math.max(1, #choiceItems)) * 22 + 10
+		choiceDropdown:SetSize(dropWidth or 180, listH)
+		choiceDropdown:ClearAllPoints()
+		choiceDropdown:SetPoint("TOPLEFT", anchorBtn, "BOTTOMLEFT", 0, -2)
+		RefreshChoiceDropdownRows()
+		mediaDropdown:Hide()
+		choiceDropdown:Show()
+		dropdownCloseOverlay:Show()
+	end
+
+	-- Build 8 category pages
 	local tabs = {
 		{ id = "general", label = "General" },
 		{ id = "frames", label = "Unit Frames" },
 		{ id = "auras", label = "Auras & Casts" },
 		{ id = "group", label = "Party & Raid" },
+		{ id = "clickcast", label = "Click-Cast" },
 		{ id = "colors", label = "Colors" },
 		{ id = "threat", label = "Aggro & Threat" },
 		{ id = "appearance", label = "Appearance" },
@@ -1080,9 +1298,9 @@ function ns.ToggleConfigGUI()
 		pages[tab.id] = page
 
 		local tbtn = CreateFrame("Button", nil, sidebar)
-		tbtn:SetPoint("TOPLEFT", 6, -(12 + (i - 1) * 34))
-		tbtn:SetPoint("TOPRIGHT", -6, -(12 + (i - 1) * 34))
-		tbtn:SetHeight(28)
+		tbtn:SetPoint("TOPLEFT", 6, -(12 + (i - 1) * 33))
+		tbtn:SetPoint("TOPRIGHT", -6, -(12 + (i - 1) * 33))
+		tbtn:SetHeight(27)
 
 		local bg = tbtn:CreateTexture(nil, "BACKGROUND")
 		bg:SetAllPoints()
@@ -1371,6 +1589,26 @@ function ns.ToggleConfigGUI()
 			end
 		end)
 
+		local card2 = CreateCard(p, "Healing & Click-Casting", 98, 198)
+		local clickCastStatusText = card2:CreateFontString(nil, "OVERLAY")
+		clickCastStatusText:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		clickCastStatusText:SetPoint("TOPLEFT", 14, -38)
+		clickCastStatusText:SetPoint("RIGHT", -186, 0)
+		clickCastStatusText:SetJustifyH("LEFT")
+
+		local openClickCastBtn = CreateActionButton(card2, "Configure Click-Cast...", 164, 24, function()
+			SelectTab("clickcast")
+		end)
+		openClickCastBtn:SetPoint("TOPRIGHT", -12, -34)
+
+		local bindNote = card2:CreateFontString(nil, "OVERLAY")
+		bindNote:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+		bindNote:SetPoint("TOPLEFT", 14, -66)
+		bindNote:SetPoint("TOPRIGHT", -14, -66)
+		bindNote:SetJustifyH("LEFT")
+		bindNote:SetTextColor(0.62, 0.62, 0.68)
+		bindNote:SetText("Configure buttons, modifiers, spells & Blizzard unit menu in Click-Cast.")
+
 		RefreshGroupUI = function()
 			local val = ns.GetPartySpacing()
 			spacingSlider._updating = true
@@ -1378,25 +1616,408 @@ function ns.ToggleConfigGUI()
 			spacingSlider._updating = nil
 			spacingVal:SetText(val .. " px")
 			fill:SetShown(val > 0)
+
+			local ccEnabled = ns.GetOptionsDB().enableClickCast == true
+			local summary = ns.GetClickCastSummary and ns.GetClickCastSummary() or nil
+			if ccEnabled then
+				local cnt = summary and summary.enabledCount or 0
+				local menuStr = summary and summary.menuCombo or "Right (Default)"
+				clickCastStatusText:SetTextColor(0.35, 0.85, 0.45)
+				clickCastStatusText:SetText(string.format("Enabled (%d active)  |  Menu: %s", cnt, menuStr))
+			else
+				clickCastStatusText:SetTextColor(0.68, 0.68, 0.74)
+				clickCastStatusText:SetText("Click-Casting: Disabled (Blizzard defaults)")
+			end
 		end
-
-		local card2 = CreateCard(p, "Healing & Click-Casting", 98, 198)
-		CreateToggleRow(card2, {
-			key = "enableClickCast",
-			label = "HealKit Smart Click-Casting (Party & Raid)",
-			tip = "Bind class-aware heals and dispels directly on Party & Raid frames.",
-		}, 1)
-
-		local bindNote = card2:CreateFontString(nil, "OVERLAY")
-		bindNote:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
-		bindNote:SetPoint("TOPLEFT", 16, -62)
-		bindNote:SetPoint("TOPRIGHT", -14, -62)
-		bindNote:SetJustifyH("LEFT")
-		bindNote:SetTextColor(0.62, 0.62, 0.68)
-		bindNote:SetText("M1: Quick Heal   |   M2: Big / HoT Heal   |   M3: Dispel   |   Shift-Click: Target")
 	end
 
-	-- Page 5: Colors
+	-- Page 5: Click-Cast
+	local RefreshClickCastUI
+	do
+		local p = pages.clickcast
+		local card1 = CreateCard(p, "Click-Casting (Party & Raid)", 66, 10)
+		local ccEnableRow = CreateToggleRow(card1, {
+			key = "enableClickCast",
+			label = "Enable Click-Casting on Party & Raid Frames",
+			tip = "Bind spells, Blizzard Unit Menu, Target, Focus, or Assist to mouse clicks on Party & Raid frames. Applies live out of combat.",
+		}, 1)
+		ccEnableRow:HookScript("OnClick", function()
+			if RefreshClickCastUI then RefreshClickCastUI() end
+			if RefreshGroupUI then RefreshGroupUI() end
+		end)
+
+		local card2 = CreateCard(p, "Class Click Bindings", 258, 84)
+		local ccOffset = 0
+		local CC_VISIBLE_ROWS = 7
+
+		local MOD_CHOICES = {
+			{ value = "", label = "None" },
+			{ value = "shift-", label = "Shift" },
+			{ value = "ctrl-", label = "Ctrl" },
+			{ value = "alt-", label = "Alt" },
+		}
+		local MOD_TEXT = {
+			[""] = "None",
+			["shift-"] = "Shift",
+			["ctrl-"] = "Ctrl",
+			["alt-"] = "Alt",
+		}
+		local BTN_CHOICES = {
+			{ value = "1", label = "Left" },
+			{ value = "2", label = "Right" },
+			{ value = "3", label = "Middle" },
+			{ value = "4", label = "Btn 4" },
+			{ value = "5", label = "Btn 5" },
+		}
+		local BTN_TEXT = {
+			["1"] = "Left",
+			["2"] = "Right",
+			["3"] = "Middle",
+			["4"] = "Btn 4",
+			["5"] = "Btn 5",
+		}
+		local ACTION_LABELS = {
+			menu = "Unit Menu (Blizzard)",
+			target = "Target Unit",
+			focus = "Focus Unit",
+			assist = "Assist Unit",
+		}
+
+		local function ApplyBindingChanges()
+			if ns.UpdateClickCastFrames then
+				ns.UpdateClickCastFrames()
+			end
+			if RefreshClickCastUI then RefreshClickCastUI() end
+			if RefreshGroupUI then RefreshGroupUI() end
+		end
+
+		local addBtn = CreateActionButton(card2, "+ Add", 56, 18, function()
+			if not ns.GetClickCastBindings then return end
+			local bindings = ns.GetClickCastBindings()
+			local used = {}
+			for _, b in ipairs(bindings) do
+				used[(b.mod or "") .. (b.button or "1")] = true
+			end
+			local nextMod, nextBtn = "shift-", "1"
+			local found = false
+			for _, m in ipairs({ "", "shift-", "ctrl-", "alt-" }) do
+				for _, bt in ipairs({ "1", "2", "3", "4", "5" }) do
+					if not used[m .. bt] then
+						nextMod, nextBtn = m, bt
+						found = true
+						break
+					end
+				end
+				if found then break end
+			end
+			table.insert(bindings, {
+				enabled = true,
+				mod = nextMod,
+				button = nextBtn,
+				action = "spell",
+				spell = "",
+			})
+			ccOffset = math.max(0, #bindings - CC_VISIBLE_ROWS)
+			ApplyBindingChanges()
+		end)
+		addBtn:SetPoint("TOPRIGHT", -100, -5)
+		addBtn.label:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		addBtn:HookScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_TOP")
+			GameTooltip:AddLine("Add Click Binding", 1, 0.82, 0)
+			GameTooltip:AddLine("Append a new modifier + mouse button slot for your current class.", 0.85, 0.85, 0.9, true)
+			GameTooltip:Show()
+		end)
+		addBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)
+
+		local resetClassBtn = CreateActionButton(card2, "Reset Class", 84, 18, function()
+			if ns.ResetClassClickCastBindings then
+				ns.ResetClassClickCastBindings()
+			end
+			ccOffset = 0
+			if RefreshClickCastUI then RefreshClickCastUI() end
+			if RefreshGroupUI then RefreshGroupUI() end
+		end)
+		resetClassBtn:SetPoint("TOPRIGHT", -10, -5)
+		resetClassBtn.label:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		resetClassBtn:HookScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_TOP")
+			GameTooltip:AddLine("Reset Class Bindings", 1, 0.82, 0)
+			GameTooltip:AddLine("Restore recommended click-cast defaults (keeps Right-Click as Blizzard Unit Menu).", 0.85, 0.85, 0.9, true)
+			GameTooltip:Show()
+		end)
+		resetClassBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)
+
+		local function AddColHeader(text, xOff)
+			local h = card2:CreateFontString(nil, "OVERLAY")
+			h:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+			h:SetPoint("TOPLEFT", xOff, -31)
+			h:SetTextColor(0.58, 0.58, 0.65)
+			h:SetText(text)
+		end
+		AddColHeader("On", 12)
+		AddColHeader("Modifier", 34)
+		AddColHeader("Button", 102)
+		AddColHeader("Action / Spell", 172)
+
+		local ccScrollTrack = card2:CreateTexture(nil, "BORDER")
+		ccScrollTrack:SetPoint("TOPRIGHT", -6, -46)
+		ccScrollTrack:SetHeight(CC_VISIBLE_ROWS * 26 - 3)
+		ccScrollTrack:SetWidth(3)
+		ccScrollTrack:SetColorTexture(1, 1, 1, 0.08)
+
+		local ccScrollThumb = card2:CreateTexture(nil, "ARTWORK")
+		ccScrollThumb:SetWidth(3)
+		ccScrollThumb:SetColorTexture(1, 0.55, 0.1, 0.85)
+
+		local function CreatePickerButton(parent, btnW, onClick)
+			local b = CreateFrame("Button", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+			b:SetSize(btnW, 20)
+			StyleFlatBox(b, 0.11, 0.11, 0.14, 1, 0.28, 0.28, 0.34, 1)
+
+			local t = b:CreateFontString(nil, "OVERLAY")
+			t:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+			t:SetPoint("LEFT", 6, 0)
+			t:SetPoint("RIGHT", -16, 0)
+			t:SetJustifyH("LEFT")
+			t:SetWordWrap(false)
+			t:SetTextColor(0.92, 0.92, 0.95)
+			b.text = t
+
+			local ar = b:CreateFontString(nil, "OVERLAY")
+			ar:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+			ar:SetPoint("RIGHT", -5, 0)
+			ar:SetTextColor(0.7, 0.7, 0.76)
+			ar:SetText("v")
+
+			b:SetScript("OnEnter", function(self)
+				self:SetBackdropBorderColor(1, 0.56, 0.12, 1)
+			end)
+			b:SetScript("OnLeave", function(self)
+				self:SetBackdropBorderColor(0.28, 0.28, 0.34, 1)
+			end)
+			b:SetScript("OnClick", onClick)
+			return b
+		end
+
+		local ccRows = {}
+		card2:EnableMouseWheel(true)
+		card2:SetScript("OnMouseWheel", function(_, delta)
+			ccOffset = ccOffset - (delta > 0 and 1 or -1)
+			if RefreshClickCastUI then RefreshClickCastUI() end
+		end)
+
+		local function BuildSpellMenuItems()
+			local items = {
+				{ value = "__ACT__:menu", label = "Unit Menu (Blizzard)", r = 1, g = 0.84, b = 0.45 },
+				{ value = "__ACT__:target", label = "Target Unit", r = 1, g = 0.84, b = 0.45 },
+				{ value = "__ACT__:focus", label = "Focus Unit", r = 1, g = 0.84, b = 0.45 },
+				{ value = "__ACT__:assist", label = "Assist Unit", r = 1, g = 0.84, b = 0.45 },
+				{ value = "__CUSTOM__", label = "Type Custom Spell...", r = 0.45, g = 0.82, b = 1 },
+			}
+			local spells = ns.GetPlayerSpellbookSpells and ns.GetPlayerSpellbookSpells() or {}
+			for _, spellName in ipairs(spells) do
+				table.insert(items, { value = spellName, label = spellName })
+			end
+			return items
+		end
+
+		for i = 1, CC_VISIBLE_ROWS do
+			local row = CreateFrame("Frame", nil, card2, BackdropTemplateMixin and "BackdropTemplate" or nil)
+			row:SetPoint("TOPLEFT", 8, -(46 + (i - 1) * 26))
+			row:SetPoint("TOPRIGHT", -14, -(46 + (i - 1) * 26))
+			row:SetHeight(23)
+			StyleFlatBox(row, 0.07, 0.07, 0.095, 0.9, 1, 1, 1, 0.05)
+
+			local cb = CreateFrame("Button", nil, row)
+			cb:SetSize(20, 20)
+			cb:SetPoint("LEFT", 3, 0)
+			local cbBox = CreateCheckVisual(cb)
+			cbBox:SetPoint("CENTER", 0, 0)
+			row.cbBox = cbBox
+			cb:SetScript("OnClick", function()
+				local bindings = ns.GetClickCastBindings and ns.GetClickCastBindings()
+				local entry = bindings and bindings[row._idx]
+				if not entry then return end
+				entry.enabled = (entry.enabled == false) and true or false
+				ApplyBindingChanges()
+			end)
+			cb:SetScript("OnEnter", function(self)
+				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+				GameTooltip:AddLine("Enable / Disable Binding", 1, 0.82, 0)
+				GameTooltip:AddLine("Uncheck to temporarily turn off this button/spell without deleting it.", 0.85, 0.85, 0.9, true)
+				GameTooltip:Show()
+			end)
+			cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+			local modBtn = CreatePickerButton(row, 62, function(self)
+				local bindings = ns.GetClickCastBindings and ns.GetClickCastBindings()
+				local entry = bindings and bindings[row._idx]
+				if not entry then return end
+				OpenChoiceDropdown(self, MOD_CHOICES, entry.mod or "", 96, function(chosen)
+					entry.mod = chosen
+					ApplyBindingChanges()
+				end)
+			end)
+			modBtn:SetPoint("LEFT", 26, 0)
+			row.modBtn = modBtn
+
+			local btnBtn = CreatePickerButton(row, 64, function(self)
+				local bindings = ns.GetClickCastBindings and ns.GetClickCastBindings()
+				local entry = bindings and bindings[row._idx]
+				if not entry then return end
+				OpenChoiceDropdown(self, BTN_CHOICES, entry.button or "1", 100, function(chosen)
+					entry.button = chosen
+					ApplyBindingChanges()
+				end)
+			end)
+			btnBtn:SetPoint("LEFT", 94, 0)
+			row.btnBtn = btnBtn
+
+			local actBtn = CreatePickerButton(row, 196, function(self)
+				local bindings = ns.GetClickCastBindings and ns.GetClickCastBindings()
+				local entry = bindings and bindings[row._idx]
+				if not entry then return end
+				local curVal
+				if (entry.action or "spell") == "spell" then
+					curVal = entry.spell or ""
+				else
+					curVal = "__ACT__:" .. entry.action
+				end
+				OpenChoiceDropdown(self, BuildSpellMenuItems(), curVal, 218, function(chosen)
+					if chosen == "__CUSTOM__" then
+						OpenCustomSpellPopup(entry.action == "spell" and entry.spell or "", function(typedSpell)
+							if typedSpell and typedSpell ~= "" then
+								entry.action = "spell"
+								entry.spell = typedSpell
+								ApplyBindingChanges()
+							end
+						end)
+					elseif chosen:sub(1, 8) == "__ACT__:" then
+						entry.action = chosen:sub(9)
+						entry.spell = ""
+						ApplyBindingChanges()
+					else
+						entry.action = "spell"
+						entry.spell = chosen
+						ApplyBindingChanges()
+					end
+				end)
+			end)
+			actBtn:SetPoint("LEFT", 164, 0)
+			row.actBtn = actBtn
+
+			local delBtn = CreateActionButton(row, "x", 20, 20, function()
+				local bindings = ns.GetClickCastBindings and ns.GetClickCastBindings()
+				if not bindings or not row._idx then return end
+				table.remove(bindings, row._idx)
+				ApplyBindingChanges()
+			end)
+			delBtn:SetPoint("RIGHT", -3, 0)
+			delBtn.label:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+			delBtn:HookScript("OnEnter", function(self)
+				GameTooltip:SetOwner(self, "ANCHOR_TOP")
+				GameTooltip:AddLine("Remove Binding", 1, 0.82, 0)
+				GameTooltip:AddLine("Delete this click-cast slot.", 0.85, 0.85, 0.9, true)
+				GameTooltip:Show()
+			end)
+			delBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)
+
+			ccRows[i] = row
+		end
+
+		local summaryLine = card2:CreateTexture(nil, "BORDER")
+		summaryLine:SetPoint("BOTTOMLEFT", 12, 26)
+		summaryLine:SetPoint("BOTTOMRIGHT", -12, 26)
+		summaryLine:SetHeight(1)
+		summaryLine:SetColorTexture(1, 1, 1, 0.06)
+
+		local summaryText = card2:CreateFontString(nil, "OVERLAY")
+		summaryText:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+		summaryText:SetPoint("BOTTOMLEFT", 12, 9)
+		summaryText:SetPoint("BOTTOMRIGHT", -12, 9)
+		summaryText:SetJustifyH("LEFT")
+		summaryText:SetWordWrap(false)
+
+		RefreshClickCastUI = function()
+			local ccEnabled = (ns.GetOptionsDB().enableClickCast == true)
+			local bindings = ns.GetClickCastBindings and ns.GetClickCastBindings() or {}
+			local total = #bindings
+			local maxOff = math.max(0, total - CC_VISIBLE_ROWS)
+			ccOffset = math.max(0, math.min(ccOffset, maxOff))
+
+			local showScroll = (total > CC_VISIBLE_ROWS)
+			ccScrollTrack:SetShown(showScroll)
+			ccScrollThumb:SetShown(showScroll)
+			if showScroll then
+				local trackH = CC_VISIBLE_ROWS * 26 - 3
+				local thumbH = math.max(22, math.floor(trackH * (CC_VISIBLE_ROWS / total)))
+				local travel = trackH - thumbH
+				local ratio = (maxOff > 0) and (ccOffset / maxOff) or 0
+				ccScrollThumb:ClearAllPoints()
+				ccScrollThumb:SetHeight(thumbH)
+				ccScrollThumb:SetPoint("TOPRIGHT", card2, "TOPRIGHT", -6, -(46 + ratio * travel))
+			end
+
+			for i = 1, CC_VISIBLE_ROWS do
+				local row = ccRows[i]
+				local idx = ccOffset + i
+				local entry = bindings[idx]
+				if entry then
+					row._idx = idx
+					local slotOn = (entry.enabled ~= false)
+					row.cbBox:SetCheckedVisual(slotOn, ccEnabled)
+
+					row.modBtn.text:SetText(MOD_TEXT[entry.mod or ""] or "None")
+					row.btnBtn.text:SetText(BTN_TEXT[entry.button or "1"] or "Left")
+
+					local act = entry.action or "spell"
+					if act == "spell" then
+						local sp = type(entry.spell) == "string" and entry.spell ~= "" and entry.spell or nil
+						if sp then
+							row.actBtn.text:SetText(sp)
+							row.actBtn.text:SetTextColor(0.92, 0.92, 0.95)
+						else
+							row.actBtn.text:SetText("Select spell...")
+							row.actBtn.text:SetTextColor(0.55, 0.55, 0.62)
+						end
+					else
+						row.actBtn.text:SetText(ACTION_LABELS[act] or act)
+						row.actBtn.text:SetTextColor(1, 0.84, 0.45)
+					end
+
+					local rowAlpha = (not ccEnabled) and 0.42 or (slotOn and 1 or 0.45)
+					row:SetAlpha(1)
+					row.cbBox:SetAlpha(ccEnabled and 1 or 0.45)
+					row.modBtn:SetAlpha(rowAlpha)
+					row.btnBtn:SetAlpha(rowAlpha)
+					row.actBtn:SetAlpha(rowAlpha)
+					row:Show()
+				else
+					row._idx = nil
+					row:Hide()
+				end
+			end
+
+			if ccEnabled then
+				local summary = ns.GetClickCastSummary and ns.GetClickCastSummary() or nil
+				local menuStr = summary and summary.menuCombo or "Right (Default)"
+				local tgtStr = summary and summary.targetCombo or "Left (Default)"
+				if summary and summary.menuAutoFallback then
+					summaryText:SetTextColor(1, 0.80, 0.35)
+					summaryText:SetText(string.format("Blizzard Menu: %s  |  Target: %s", menuStr, tgtStr))
+				else
+					summaryText:SetTextColor(0.58, 0.80, 0.62)
+					summaryText:SetText(string.format("Blizzard Menu: %s  |  Target: %s", menuStr, tgtStr))
+				end
+			else
+				summaryText:SetTextColor(0.62, 0.62, 0.68)
+				summaryText:SetText("Click-Casting disabled — default Blizzard Left/Right clicks are active.")
+			end
+		end
+	end
+
+	-- Page 6: Colors
 	local RefreshColorUI
 	do
 		local p = pages.colors
@@ -1978,6 +2599,7 @@ function ns.ToggleConfigGUI()
 		end
 		RefreshDependencies()
 		if RefreshGroupUI then RefreshGroupUI() end
+		if RefreshClickCastUI then RefreshClickCastUI() end
 		if RefreshColorUI then RefreshColorUI() end
 		if RefreshThreatUI then RefreshThreatUI() end
 		if RefreshAppearanceUI then RefreshAppearanceUI() end
@@ -2001,6 +2623,8 @@ function ns.ToggleConfigGUI()
 		end
 		if activeTabId == "colors" and ns.GetClassColorsDB then
 			table.wipe(ns.GetClassColorsDB())
+		elseif activeTabId == "clickcast" and ns.ResetClassClickCastBindings then
+			ns.ResetClassClickCastBindings()
 		end
 		if ns.ApplySavedOptions then
 			ns.ApplySavedOptions()

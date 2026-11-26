@@ -866,6 +866,8 @@ local function ApplyEdgeBackdrop(widget, backdropDef)
 	end
 end
 
+local testModeActive = false
+
 local function EnsureThreatBorder(frame)
 	if frame.ThreatBorder then return frame.ThreatBorder end
 	local border = CreateFrame("Frame", nil, frame, BackdropTemplateMixin and "BackdropTemplate" or nil)
@@ -919,7 +921,8 @@ local function EnsureThreatBadge(frame)
 	if frame.ThreatBadge then return frame.ThreatBadge end
 	local compact = (frame:GetHeight() <= 26)
 	local unit = frame.__unit or (frame.GetAttribute and frame:GetAttribute("unit")) or ""
-	local isParty = type(unit) == "string" and unit:match("^party") ~= nil
+	local frameName = frame.GetName and frame:GetName() or ""
+	local isParty = (type(unit) == "string" and unit:match("^party") ~= nil) or (frameName:match("^oUF_Party%d+$") ~= nil)
 
 	local badge = CreateFrame("Frame", nil, frame, BackdropTemplateMixin and "BackdropTemplate" or nil)
 	badge:SetFrameLevel(frame:GetFrameLevel() + 6)
@@ -958,9 +961,38 @@ local function EnsureThreatBadge(frame)
 	return badge
 end
 
+local TEST_THREAT_STATUS_BY_FRAME = {
+	oUF_player = 3,
+	oUF_Party1 = 3,
+	oUF_BrunRaid1UnitButton1 = 3,
+	oUF_Party2 = 2,
+	oUF_target = 2,
+	oUF_BrunRaid2UnitButton1 = 2,
+	oUF_Party3 = 1,
+	oUF_BrunRaid3UnitButton1 = 1,
+	oUF_Party4 = 0,
+}
+
+local function GetTestThreatStatus(frame)
+	if not testModeActive or not frame then return nil end
+	if frame.testThreatStatus ~= nil then
+		return frame.testThreatStatus
+	end
+	local name = frame.GetName and frame:GetName() or nil
+	return name and TEST_THREAT_STATUS_BY_FRAME[name] or nil
+end
+
 local function PostUpdateThreat(element, _, status, color)
 	local frame = element.__owner
 	if not frame then return end
+
+	if testModeActive then
+		local testStatus = GetTestThreatStatus(frame)
+		if testStatus ~= nil then
+			status = testStatus
+			color = nil
+		end
+	end
 
 	if not enableThreatHighlight or not status or issecretvalue(status) or status <= 0 then
 		if frame.SetBackdropColor then
@@ -1030,6 +1062,21 @@ local targetThreatWatcher
 local function UpdateTargetThreat(watcher)
 	local threatBar = watcher and watcher.ThreatBar
 	if not threatBar then return end
+
+	if testModeActive then
+		if not showTargetThreat or not (_G.oUF_target and _G.oUF_target:IsShown()) then
+			threatBar:Hide()
+			return
+		end
+		local pct = targetThreatRawPct and 112 or 88
+		local r, g, b = 1, 0.48, 0.08
+		threatBar:SetValue(math.min(100, pct))
+		threatBar:SetStatusBarColor(r, g, b)
+		threatBar.bg:SetVertexColor(r, g, b)
+		threatBar.text:SetFormattedText("%d%%", pct)
+		threatBar:Show()
+		return
+	end
 
 	if not showTargetThreat or not UnitDetailedThreatSituation or not UnitExists("target") or UnitIsDeadOrGhost("target") or not UnitCanAttack("player", "target") then
 		threatBar:Hide()
@@ -1254,6 +1301,10 @@ end
 
 local RegisterClickCastFrame
 local UpdateAllClickCastFrames
+local GetClickCastBindingsList
+local ResetClassClickCastBindings
+local GetPlayerSpellbookSpells
+local GetClickCastSummary
 
 do
 	local CLICKCAST_SPELL_IDS = {
@@ -1334,64 +1385,84 @@ do
 		["Remove Curse (Mage)"] = 475,
 	}
 
+	-- Default presets keep plain Right-Click ("", "2") as the Blizzard Unit Menu so Whisper/Uninvite/Trade work out of the box.
 	local CLASS_CLICKCAST_PRESETS = {
 		PRIEST = {
-			{ mod = "", button = "1", spells = { "Flash Heal", "Heal", "Lesser Heal" } },
-			{ mod = "", button = "2", spells = { "Renew", "Heal" } },
-			{ mod = "", button = "3", spells = { "Purify", "Dispel Magic", "Purify Disease" } },
-			{ mod = "shift-", button = "1", spells = { "Power Word: Shield" } },
-			{ mod = "shift-", button = "2", spells = { "Abolish Disease", "Cure Disease", "Purify Disease", "Dispel Magic" } },
-			{ mod = "shift-", button = "3", spells = { "Resurrection" } },
-			{ mod = "ctrl-", button = "1", spells = { "Penance", "Prayer of Mending", "Greater Heal", "Power Word: Radiance" } },
+			{ mod = "", button = "1", action = "spell", spells = { "Flash Heal", "Heal", "Lesser Heal" } },
+			{ mod = "", button = "2", action = "menu" },
+			{ mod = "", button = "3", action = "spell", spells = { "Purify", "Dispel Magic", "Purify Disease" } },
+			{ mod = "shift-", button = "1", action = "spell", spells = { "Renew", "Heal" } },
+			{ mod = "shift-", button = "2", action = "spell", spells = { "Power Word: Shield", "Abolish Disease", "Cure Disease", "Purify Disease" } },
+			{ mod = "shift-", button = "3", action = "spell", spells = { "Resurrection" } },
+			{ mod = "ctrl-", button = "1", action = "spell", spells = { "Penance", "Prayer of Mending", "Greater Heal", "Power Word: Radiance" } },
+			{ mod = "alt-", button = "1", action = "target" },
 		},
 		DRUID = {
-			{ mod = "", button = "1", spells = { "Regrowth", "Healing Touch" } },
-			{ mod = "", button = "2", spells = { "Rejuvenation" } },
-			{ mod = "", button = "3", spells = { "Nature's Cure", "Remove Corruption", "Remove Curse" } },
-			{ mod = "shift-", button = "1", spells = { "Swiftmend", "Lifebloom" } },
-			{ mod = "shift-", button = "2", spells = { "Abolish Poison", "Cure Poison", "Remove Corruption" } },
-			{ mod = "shift-", button = "3", spells = { "Revive" } },
-			{ mod = "ctrl-", button = "1", spells = { "Wild Growth" } },
+			{ mod = "", button = "1", action = "spell", spells = { "Regrowth", "Healing Touch" } },
+			{ mod = "", button = "2", action = "menu" },
+			{ mod = "", button = "3", action = "spell", spells = { "Nature's Cure", "Remove Corruption", "Remove Curse" } },
+			{ mod = "shift-", button = "1", action = "spell", spells = { "Rejuvenation" } },
+			{ mod = "shift-", button = "2", action = "spell", spells = { "Swiftmend", "Lifebloom", "Abolish Poison", "Cure Poison" } },
+			{ mod = "shift-", button = "3", action = "spell", spells = { "Revive" } },
+			{ mod = "ctrl-", button = "1", action = "spell", spells = { "Wild Growth" } },
+			{ mod = "alt-", button = "1", action = "target" },
 		},
 		PALADIN = {
-			{ mod = "", button = "1", spells = { "Flash of Light", "Holy Light" } },
-			{ mod = "", button = "2", spells = { "Holy Light", "Word of Glory" } },
-			{ mod = "", button = "3", spells = { "Cleanse", "Cleanse Toxins", "Purify (Paladin)" } },
-			{ mod = "shift-", button = "1", spells = { "Holy Shock", "Word of Glory" } },
-			{ mod = "shift-", button = "2", spells = { "Blessing of Protection" } },
-			{ mod = "shift-", button = "3", spells = { "Redemption" } },
-			{ mod = "ctrl-", button = "1", spells = { "Light's Vigil", "Blessing of Freedom", "Lay on Hands" } },
+			{ mod = "", button = "1", action = "spell", spells = { "Flash of Light", "Holy Light" } },
+			{ mod = "", button = "2", action = "menu" },
+			{ mod = "", button = "3", action = "spell", spells = { "Cleanse", "Cleanse Toxins", "Purify (Paladin)" } },
+			{ mod = "shift-", button = "1", action = "spell", spells = { "Holy Light", "Word of Glory" } },
+			{ mod = "shift-", button = "2", action = "spell", spells = { "Holy Shock", "Blessing of Protection", "Word of Glory" } },
+			{ mod = "shift-", button = "3", action = "spell", spells = { "Redemption" } },
+			{ mod = "ctrl-", button = "1", action = "spell", spells = { "Lay on Hands", "Light's Vigil", "Blessing of Freedom" } },
+			{ mod = "alt-", button = "1", action = "target" },
 		},
 		SHAMAN = {
-			{ mod = "", button = "1", spells = { "Healing Surge", "Lesser Healing Wave", "Healing Wave" } },
-			{ mod = "", button = "2", spells = { "Riptide", "Healing Wave" } },
-			{ mod = "", button = "3", spells = { "Purify Spirit", "Cleanse Spirit", "Cure Poison (Shaman)", "Cure Disease (Shaman)" } },
-			{ mod = "shift-", button = "1", spells = { "Chain Heal" } },
-			{ mod = "shift-", button = "2", spells = { "Cure Disease (Shaman)", "Cure Poison (Shaman)", "Cleanse Spirit" } },
-			{ mod = "shift-", button = "3", spells = { "Ancestral Spirit" } },
-			{ mod = "ctrl-", button = "1", spells = { "Riptide", "Chain Heal" } },
+			{ mod = "", button = "1", action = "spell", spells = { "Healing Surge", "Lesser Healing Wave", "Healing Wave" } },
+			{ mod = "", button = "2", action = "menu" },
+			{ mod = "", button = "3", action = "spell", spells = { "Purify Spirit", "Cleanse Spirit", "Cure Poison (Shaman)", "Cure Disease (Shaman)" } },
+			{ mod = "shift-", button = "1", action = "spell", spells = { "Riptide", "Healing Wave" } },
+			{ mod = "shift-", button = "2", action = "spell", spells = { "Chain Heal", "Cure Disease (Shaman)", "Cure Poison (Shaman)" } },
+			{ mod = "shift-", button = "3", action = "spell", spells = { "Ancestral Spirit" } },
+			{ mod = "ctrl-", button = "1", action = "spell", spells = { "Chain Heal", "Riptide" } },
+			{ mod = "alt-", button = "1", action = "target" },
 		},
 		MONK = {
-			{ mod = "", button = "1", spells = { "Vivify" } },
-			{ mod = "", button = "2", spells = { "Renewing Mist" } },
-			{ mod = "", button = "3", spells = { "Detox" } },
-			{ mod = "shift-", button = "1", spells = { "Enveloping Mist", "Soothing Mist" } },
-			{ mod = "shift-", button = "3", spells = { "Resuscitate" } },
-			{ mod = "ctrl-", button = "1", spells = { "Life Cocoon", "Revival" } },
+			{ mod = "", button = "1", action = "spell", spells = { "Vivify" } },
+			{ mod = "", button = "2", action = "menu" },
+			{ mod = "", button = "3", action = "spell", spells = { "Detox" } },
+			{ mod = "shift-", button = "1", action = "spell", spells = { "Renewing Mist" } },
+			{ mod = "shift-", button = "2", action = "spell", spells = { "Enveloping Mist", "Soothing Mist" } },
+			{ mod = "shift-", button = "3", action = "spell", spells = { "Resuscitate" } },
+			{ mod = "ctrl-", button = "1", action = "spell", spells = { "Life Cocoon", "Revival" } },
+			{ mod = "alt-", button = "1", action = "target" },
 		},
 		EVOKER = {
-			{ mod = "", button = "1", spells = { "Living Flame" } },
-			{ mod = "", button = "2", spells = { "Echo", "Verdant Embrace" } },
-			{ mod = "", button = "3", spells = { "Naturalize", "Expunge" } },
-			{ mod = "shift-", button = "1", spells = { "Verdant Embrace", "Spiritbloom" } },
-			{ mod = "shift-", button = "2", spells = { "Cauterizing Flame" } },
-			{ mod = "shift-", button = "3", spells = { "Return" } },
-			{ mod = "ctrl-", button = "1", spells = { "Emerald Blossom", "Dream Breath" } },
+			{ mod = "", button = "1", action = "spell", spells = { "Living Flame" } },
+			{ mod = "", button = "2", action = "menu" },
+			{ mod = "", button = "3", action = "spell", spells = { "Naturalize", "Expunge" } },
+			{ mod = "shift-", button = "1", action = "spell", spells = { "Echo", "Verdant Embrace" } },
+			{ mod = "shift-", button = "2", action = "spell", spells = { "Verdant Embrace", "Cauterizing Flame" } },
+			{ mod = "shift-", button = "3", action = "spell", spells = { "Return" } },
+			{ mod = "ctrl-", button = "1", action = "spell", spells = { "Emerald Blossom", "Dream Breath" } },
+			{ mod = "alt-", button = "1", action = "target" },
 		},
 		MAGE = {
-			{ mod = "", button = "3", spells = { "Remove Curse (Mage)" } },
+			{ mod = "", button = "1", action = "target" },
+			{ mod = "", button = "2", action = "menu" },
+			{ mod = "", button = "3", action = "spell", spells = { "Remove Curse (Mage)" } },
 		},
 	}
+
+	local VALID_MODS = { [""] = true, ["shift-"] = true, ["ctrl-"] = true, ["alt-"] = true }
+	local VALID_BUTTONS = { ["1"] = true, ["2"] = true, ["3"] = true, ["4"] = true, ["5"] = true }
+	local FALLBACK_MODS = { "alt-", "ctrl-", "shift-", "ctrl-alt-" }
+	local MOD_LABELS = { [""] = "", ["shift-"] = "Shift+", ["ctrl-"] = "Ctrl+", ["alt-"] = "Alt+", ["ctrl-alt-"] = "Ctrl+Alt+" }
+	local BTN_LABELS = { ["1"] = "Left", ["2"] = "Right", ["3"] = "Middle", ["4"] = "Btn 4", ["5"] = "Btn 5" }
+
+	local function FormatComboLabel(mod, button)
+		return (MOD_LABELS[mod or ""] or (mod or "")) .. (BTN_LABELS[button or "1"] or ("Btn " .. tostring(button)))
+	end
 
 	local function GetSpellDisplayInfo(idOrName)
 		if C_Spell and C_Spell.GetSpellInfo then
@@ -1441,9 +1512,137 @@ do
 		return nil
 	end
 
+	local function BuildDefaultClassBindings()
+		local preset = CLASS_CLICKCAST_PRESETS[playerClass]
+		local out = {}
+		local seenCombo = {}
+		local hasMenu, hasTarget, hasLeftSpell = false, false, false
+
+		if preset then
+			for _, slot in ipairs(preset) do
+				local mod = slot.mod or ""
+				local button = slot.button or "1"
+				local combo = mod .. button
+				if not seenCombo[combo] then
+					if slot.action == "menu" or slot.action == "target" or slot.action == "focus" or slot.action == "assist" then
+						table.insert(out, {
+							enabled = true,
+							mod = mod,
+							button = button,
+							action = slot.action,
+							spell = "",
+						})
+						seenCombo[combo] = true
+						if slot.action == "menu" then hasMenu = true end
+						if slot.action == "target" then hasTarget = true end
+					elseif slot.spells then
+						local spellName
+						for _, key in ipairs(slot.spells) do
+							spellName = ResolveSpellKey(key)
+							if spellName then break end
+						end
+						if spellName then
+							table.insert(out, {
+								enabled = true,
+								mod = mod,
+								button = button,
+								action = "spell",
+								spell = spellName,
+							})
+							seenCombo[combo] = true
+							if mod == "" and button == "1" then hasLeftSpell = true end
+						end
+					end
+				end
+			end
+		end
+
+		if #out == 0 then
+			table.insert(out, { enabled = true, mod = "", button = "1", action = "target", spell = "" })
+			table.insert(out, { enabled = true, mod = "", button = "2", action = "menu", spell = "" })
+			return out
+		end
+
+		if not hasMenu and not seenCombo["2"] then
+			table.insert(out, 2, { enabled = true, mod = "", button = "2", action = "menu", spell = "" })
+			seenCombo["2"] = true
+		end
+		if hasLeftSpell and not hasTarget and not seenCombo["alt-1"] then
+			table.insert(out, { enabled = true, mod = "alt-", button = "1", action = "target", spell = "" })
+		end
+		return out
+	end
+
+	GetClickCastBindingsList = function()
+		if not ns.GetClickCastDB then return {} end
+		local db = ns.GetClickCastDB()
+		if type(db[playerClass]) ~= "table" then
+			db[playerClass] = BuildDefaultClassBindings()
+		end
+		return db[playerClass]
+	end
+
+	GetPlayerSpellbookSpells = function()
+		local seen = {}
+		if C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines and C_SpellBook.GetSpellBookSkillLineInfo and C_SpellBook.GetSpellBookItemInfo then
+			local numLines = C_SpellBook.GetNumSpellBookSkillLines() or 0
+			local bank = (Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player) or 0
+			local spellType = (Enum and Enum.SpellBookItemType and Enum.SpellBookItemType.Spell) or "SPELL"
+			for line = 1, numLines do
+				local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
+				if info and not info.isGuild and (not info.offSpecID or info.offSpecID == 0) then
+					local startIdx = (info.itemIndexOffset or 0) + 1
+					local endIdx = (info.itemIndexOffset or 0) + (info.numSpellBookItems or 0)
+					for slot = startIdx, endIdx do
+						local item = C_SpellBook.GetSpellBookItemInfo(slot, bank)
+						if item and item.itemType == spellType and not item.isPassive and not item.isOffSpec and item.name and item.name ~= "" then
+							seen[item.name] = true
+						end
+					end
+				end
+			end
+		elseif GetNumSpellTabs and GetSpellTabInfo and GetSpellBookItemInfo then
+			local numTabs = GetNumSpellTabs() or 0
+			local bookType = BOOKTYPE_SPELL or "spell"
+			for tab = 1, numTabs do
+				local _, _, offset, numSlots, isGuild, offspecID = GetSpellTabInfo(tab)
+				if not isGuild and (not offspecID or offspecID == 0) then
+					for slot = (offset or 0) + 1, (offset or 0) + (numSlots or 0) do
+						local itemType, spellID = GetSpellBookItemInfo(slot, bookType)
+						local name = GetSpellBookItemName and GetSpellBookItemName(slot, bookType)
+						local passive = IsPassiveSpell and (IsPassiveSpell(slot, bookType) or (spellID and IsPassiveSpell(spellID)))
+						if itemType == "SPELL" and name and name ~= "" and not passive then
+							seen[name] = true
+						end
+					end
+				end
+			end
+		end
+
+		for spellKey in pairs(CLICKCAST_SPELL_IDS) do
+			local known = ResolveSpellKey(spellKey)
+			if known and known ~= "" then
+				seen[known] = true
+			end
+		end
+
+		local out = {}
+		for name in pairs(seen) do
+			table.insert(out, name)
+		end
+		table.sort(out)
+		return out
+	end
+
 	local clickCastFrames = {}
 	local pendingHeaderRegister = {}
 	local pendingClickCastUpdate = false
+	local lastSummary = {
+		enabledCount = 0,
+		menuCombo = "Right (Default)",
+		targetCombo = "Left (Default)",
+		menuAutoFallback = false,
+	}
 
 	local function SetManagedAttr(frame, attrs, key, val)
 		if attrs[key] ~= val then
@@ -1461,28 +1660,102 @@ do
 		frame._brunClickCastAttrs = nil
 	end
 
-	local function ResolvePresetPlan()
-		if not enableClickCast then return nil end
-		local preset = CLASS_CLICKCAST_PRESETS[playerClass]
-		if not preset then return nil end
+	local function ResolveClickCastPlan()
+		if not enableClickCast then
+			lastSummary = {
+				enabledCount = 0,
+				menuCombo = "Right (Default)",
+				targetCombo = "Left (Default)",
+				menuAutoFallback = false,
+			}
+			return nil
+		end
+
+		local bindings = GetClickCastBindingsList()
 		local plan = {}
-		local hasAny = false
-		for _, slot in ipairs(preset) do
-			local spellName
-			for _, key in ipairs(slot.spells) do
-				spellName = ResolveSpellKey(key)
-				if spellName then break end
-			end
-			if spellName then
-				hasAny = true
-				plan[slot.mod .. "type" .. slot.button] = "spell"
-				plan[slot.mod .. "spell" .. slot.button] = spellName
+		local seenCombo = {}
+		local enabledCount = 0
+		local menuCombo = nil
+		local targetCombo = nil
+		local menuAutoFallback = false
+
+		for _, entry in ipairs(bindings) do
+			if type(entry) == "table" and entry.enabled ~= false then
+				local mod = VALID_MODS[entry.mod] and entry.mod or ""
+				local button = VALID_BUTTONS[entry.button] and entry.button or "1"
+				local combo = mod .. button
+				if not seenCombo[combo] then
+					local act = entry.action or "spell"
+					if act == "spell" then
+						local spellName = type(entry.spell) == "string" and entry.spell:match("^%s*(.-)%s*$") or ""
+						if spellName ~= "" then
+							plan[mod .. "type" .. button] = "spell"
+							plan[mod .. "spell" .. button] = spellName
+							seenCombo[combo] = true
+							enabledCount = enabledCount + 1
+						end
+					elseif act == "menu" then
+						plan[mod .. "type" .. button] = "__MENU__"
+						seenCombo[combo] = true
+						enabledCount = enabledCount + 1
+						if not menuCombo then menuCombo = FormatComboLabel(mod, button) end
+					elseif act == "target" or act == "focus" or act == "assist" then
+						plan[mod .. "type" .. button] = act
+						seenCombo[combo] = true
+						enabledCount = enabledCount + 1
+						if act == "target" and not targetCombo then
+							targetCombo = FormatComboLabel(mod, button)
+						end
+					end
+				end
 			end
 		end
-		if not hasAny then return nil end
-		plan["alt-type1"] = "target"
-		plan["alt-type2"] = "togglemenu"
+
+		-- Guarantee Blizzard unit context menu & targeting remain reachable even when plain Right/Left are overridden.
+		if not menuCombo then
+			if not seenCombo["2"] then
+				menuCombo = "Right (Default)"
+			else
+				for _, fbMod in ipairs(FALLBACK_MODS) do
+					if not seenCombo[fbMod .. "2"] then
+						plan[fbMod .. "type2"] = "__MENU__"
+						seenCombo[fbMod .. "2"] = true
+						menuCombo = FormatComboLabel(fbMod, "2") .. " (Auto)"
+						menuAutoFallback = true
+						break
+					end
+				end
+			end
+		end
+
+		if not targetCombo then
+			if not seenCombo["1"] then
+				targetCombo = "Left (Default)"
+			else
+				for _, fbMod in ipairs(FALLBACK_MODS) do
+					if not seenCombo[fbMod .. "1"] then
+						plan[fbMod .. "type1"] = "target"
+						seenCombo[fbMod .. "1"] = true
+						targetCombo = FormatComboLabel(fbMod, "1") .. " (Auto)"
+						break
+					end
+				end
+			end
+		end
+
+		lastSummary = {
+			enabledCount = enabledCount,
+			menuCombo = menuCombo or "Unbound",
+			targetCombo = targetCombo or "Unbound",
+			menuAutoFallback = menuAutoFallback,
+		}
+
+		if not next(plan) then return nil end
 		return plan
+	end
+
+	GetClickCastSummary = function()
+		return lastSummary
 	end
 
 	local function ApplyClickCastToFrame(frame, plan)
@@ -1506,6 +1779,7 @@ do
 			attrs = {}
 			frame._brunClickCastAttrs = attrs
 		end
+		local defaultMenu = frame._brunDefaultMenuType or frame:GetAttribute("*type2") or "togglemenu"
 		for key in pairs(attrs) do
 			if plan[key] == nil then
 				frame:SetAttribute(key, nil)
@@ -1513,13 +1787,15 @@ do
 			end
 		end
 		for key, val in pairs(plan) do
-			SetManagedAttr(frame, attrs, key, val)
+			local resolved = (val == "__MENU__") and defaultMenu or val
+			SetManagedAttr(frame, attrs, key, resolved)
 		end
 	end
 
 	RegisterClickCastFrame = function(frame)
 		if not frame or clickCastFrames[frame] then return end
 		clickCastFrames[frame] = true
+		frame._brunDefaultMenuType = frame:GetAttribute("*type2") or "togglemenu"
 		_G.ClickCastFrames = _G.ClickCastFrames or {}
 		if not _G.ClickCastFrames[frame] then
 			_G.ClickCastFrames[frame] = true
@@ -1532,7 +1808,7 @@ do
 		if _G.ClickCastHeader and _G.ClickCastHeader.RegisterFrame then
 			pcall(_G.ClickCastHeader.RegisterFrame, _G.ClickCastHeader, frame)
 		end
-		ApplyClickCastToFrame(frame, ResolvePresetPlan())
+		ApplyClickCastToFrame(frame, ResolveClickCastPlan())
 	end
 
 	UpdateAllClickCastFrames = function()
@@ -1541,10 +1817,18 @@ do
 			return
 		end
 		pendingClickCastUpdate = false
-		local plan = ResolvePresetPlan()
+		local plan = ResolveClickCastPlan()
 		for frame in pairs(clickCastFrames) do
 			ApplyClickCastToFrame(frame, plan)
 		end
+	end
+
+	ResetClassClickCastBindings = function()
+		if ns.GetClickCastDB then
+			ns.GetClickCastDB()[playerClass] = BuildDefaultClassBindings()
+		end
+		UpdateAllClickCastFrames()
+		return GetClickCastBindingsList()
 	end
 
 	local ccWatcher = CreateFrame("Frame")
@@ -1608,6 +1892,9 @@ local function ApplyHealthColors()
 end
 
 local function ApplyThreatSettings()
+	if targetThreatWatcher then
+		UpdateTargetThreat(targetThreatWatcher)
+	end
 	if oUF and oUF.objects then
 		for _, obj in ipairs(oUF.objects) do
 			if not enableThreatHighlight then
@@ -1621,8 +1908,8 @@ local function ApplyThreatSettings()
 			end
 		end
 	end
-	if targetThreatWatcher then
-		UpdateTargetThreat(targetThreatWatcher)
+	if ns.RefreshRaidTestDummyThreat then
+		ns.RefreshRaidTestDummyThreat()
 	end
 end
 
@@ -1852,8 +2139,6 @@ local function CreatePositionAnchor(key, w, h, defaultPoint)
 	return anchor
 end
 
-local testModeActive = false
-
 local function ToggleTestFrames(forceOff)
 	if InCombatLockdown() then return end
 
@@ -1896,6 +2181,8 @@ local function ToggleTestFrames(forceOff)
 	if ns.ToggleRaidTestFrames then
 		ns.ToggleRaidTestFrames(testModeActive)
 	end
+
+	ApplyThreatSettings()
 
 	if ns.UpdateTestBtnState then
 		ns.UpdateTestBtnState()
@@ -2971,6 +3258,11 @@ ns.CreateHealthPrediction = CreateHealthPrediction
 ns.CreateAuraWidget = CreateAuraWidget
 ns.CreatePositionAnchor = CreatePositionAnchor
 ns.RegisterClickCastFrame = RegisterClickCastFrame
+ns.GetClickCastBindings = GetClickCastBindingsList
+ns.ResetClassClickCastBindings = ResetClassClickCastBindings
+ns.UpdateClickCastFrames = UpdateAllClickCastFrames
+ns.GetPlayerSpellbookSpells = GetPlayerSpellbookSpells
+ns.GetClickCastSummary = GetClickCastSummary
 ns.ApplySavedOptions = ApplySavedOptions
 ns.ApplyPartySpacing = ApplyPartySpacing
 ns.ApplyHealthColors = ApplyHealthColors
@@ -3006,6 +3298,9 @@ ns.ResetDefaults = function()
 	table.wipe(ns.GetPositionsDB())
 	if type(oUF_BrunDB) == "table" and type(oUF_BrunDB.ClassColors) == "table" then
 		table.wipe(oUF_BrunDB.ClassColors)
+	end
+	if type(oUF_BrunDB) == "table" and type(oUF_BrunDB.ClickCast) == "table" then
+		table.wipe(oUF_BrunDB.ClickCast)
 	end
 	local freshOpts = ns.GetOptionsDB()
 	for _, mover in pairs(movers) do

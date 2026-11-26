@@ -357,6 +357,15 @@ local function BuildRaidTestDummy(parent, groupIdx, memberIdx)
 	dummy.classToken = classToken
 	dummy.hp = hp
 	dummy.hpbg = hpbg
+	if groupIdx == 1 and memberIdx == 2 then
+		dummy.testThreatStatus = 3
+	elseif groupIdx == 1 and memberIdx == 3 then
+		dummy.testThreatStatus = 2
+	elseif groupIdx == 2 and memberIdx == 2 then
+		dummy.testThreatStatus = 1
+	else
+		dummy.testThreatStatus = 0
+	end
 
 	local pp = CreateFrame("StatusBar", nil, dummy)
 	pp:SetPoint("TOPLEFT", hp, "BOTTOMLEFT", 0, -1)
@@ -410,6 +419,15 @@ local function BuildRaidTestDummy(parent, groupIdx, memberIdx)
 	return dummy
 end
 
+function ns.RefreshRaidTestDummyThreat()
+	if not ns.PostUpdateThreat then return end
+	local active = ns.IsTestModeActive and ns.IsTestModeActive() or false
+	for _, dummy in pairs(testRaidDummies) do
+		local status = (active and dummy:IsShown()) and (dummy.testThreatStatus or 0) or 0
+		ns.PostUpdateThreat({ __owner = dummy }, nil, status)
+	end
+end
+
 function ns.ToggleRaidTestFrames(testModeActive)
 	if InCombatLockdown() then return end
 
@@ -456,6 +474,8 @@ function ns.ToggleRaidTestFrames(testModeActive)
 			end
 		end
 	end
+
+	ns.RefreshRaidTestDummyThreat()
 end
 
 --===================================================--
