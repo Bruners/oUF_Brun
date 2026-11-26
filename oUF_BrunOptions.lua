@@ -12,6 +12,68 @@ local TEXTURE = ns.TEXTURE
 local FONT_SIZE = ns.FONT_SIZE or 14
 local SMALL_FONT_SIZE = ns.SMALL_FONT_SIZE or 12
 
+--===================================================--
+-- Default Options & SavedVariables Accessors
+--===================================================--
+
+local DEFAULT_OPTIONS = {
+	enableFader = true,
+	firstNameOnly = false,
+	shortRaceNames = true,
+	desaturateOtherDebuffs = true,
+	enableHealthPrediction = true,
+	enableThreatHighlight = true,
+	hideSelfInfo = true,
+	hidePartyInRaid = false,
+	showRaidFrames = true,
+	enableClickCast = false,
+	showPortraits = false,
+	use2DPortraits = false,
+	showBossFrames = true,
+	showTargetTarget = true,
+	showTargetTargetTarget = true,
+	enableTotemBar = true,
+	hideCompactRaidManager = true,
+	oUFRuneBar = false,
+	removeBuffs = false,
+	playerCastBar = true,
+	targetCastBar = true,
+	focusCastBar = true,
+	playerShowBuffs = true,
+	playerShowDebuffs = true,
+	targetShowBuffs = true,
+	targetShowDebuffs = true,
+	focusShowBuffs = true,
+	focusShowDebuffs = true,
+	partyShowBuffs = true,
+	partyShowDebuffs = true,
+	highlightExpiringAuras = true,
+	highlightDispellableDebuffs = true,
+	enableSwingBar = true,
+	enableClassPower = true,
+	showMinimapIcon = true,
+}
+
+ns.DEFAULT_OPTIONS = DEFAULT_OPTIONS
+
+function ns.GetPositionsDB()
+	if type(oUF_BrunDB) ~= "table" then oUF_BrunDB = {} end
+	if type(oUF_BrunDB.Positions) ~= "table" then oUF_BrunDB.Positions = {} end
+	return oUF_BrunDB.Positions
+end
+
+function ns.GetOptionsDB()
+	if type(oUF_BrunDB) ~= "table" then oUF_BrunDB = {} end
+	if type(oUF_BrunDB.Options) ~= "table" then oUF_BrunDB.Options = {} end
+	local opts = oUF_BrunDB.Options
+	for k, v in pairs(DEFAULT_OPTIONS) do
+		if opts[k] == nil then
+			opts[k] = v
+		end
+	end
+	return opts
+end
+
 local LIVE_OPTIONS = {
 	firstNameOnly = true,
 	shortRaceNames = true,
@@ -771,4 +833,133 @@ function ns.ToggleConfigGUI()
 	end)
 
 	configFrame = f
+end
+
+--===================================================--
+-- Minimap Button & /brun Slash Commands
+--===================================================--
+
+local minimapButton
+
+function ns.SetMinimapButtonShown(shown)
+	if minimapButton then
+		minimapButton:SetShown(shown)
+	end
+end
+
+function ns.CreateMinimapButton()
+	if minimapButton or not Minimap then return end
+
+	local btn = CreateFrame("Button", "oUF_BrunMinimapButton", Minimap)
+	btn:SetSize(31, 31)
+	btn:SetFrameStrata("MEDIUM")
+	btn:SetToplevel(true)
+	btn:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+
+	local overlay = btn:CreateTexture(nil, "OVERLAY")
+	overlay:SetSize(53, 53)
+	overlay:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+	overlay:SetPoint("TOPLEFT", 0, 0)
+
+	local background = btn:CreateTexture(nil, "BACKGROUND")
+	background:SetSize(20, 20)
+	background:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
+	background:SetVertexColor(0.12, 0.12, 0.14, 1.0)
+	background:SetPoint("TOPLEFT", 7, -5)
+
+	local iconText = btn:CreateFontString(nil, "ARTWORK")
+	iconText:SetFont(FONT, 15, "OUTLINE")
+	iconText:SetPoint("CENTER", background, "CENTER", 0.5, 0.5)
+	iconText:SetText("|cffff8000B|r")
+	iconText:SetShadowOffset(1, -1)
+	iconText:SetShadowColor(0, 0, 0, 1)
+
+	local function UpdatePosition()
+		local pos = (oUF_BrunDB and oUF_BrunDB.minimapPos) or 210
+		local angle = math.rad(pos)
+		local x, y = math.cos(angle), math.sin(angle)
+
+		local minimapShape = GetMinimapShape and GetMinimapShape() or "ROUND"
+		local isRound = (minimapShape == "ROUND")
+		local w = (Minimap:GetWidth() / 2) + 10
+		local h = (Minimap:GetHeight() / 2) + 10
+
+		if isRound then
+			x, y = x * w, y * h
+		else
+			local diagRadiusW = math.sqrt(2 * (w ^ 2)) - 10
+			local diagRadiusH = math.sqrt(2 * (h ^ 2)) - 10
+			x = math.max(-w, math.min(x * diagRadiusW, w))
+			y = math.max(-h, math.min(y * diagRadiusH, h))
+		end
+
+		btn:ClearAllPoints()
+		btn:SetPoint("CENTER", Minimap, "CENTER", x, y)
+	end
+	UpdatePosition()
+
+	btn:EnableMouse(true)
+	btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	btn:RegisterForDrag("LeftButton")
+
+	btn:SetScript("OnDragStart", function(self)
+		self.dragging = true
+		self:SetScript("OnUpdate", function()
+			local mx, my = Minimap:GetCenter()
+			local cx, cy = GetCursorPosition()
+			local scale = Minimap:GetEffectiveScale()
+			cx, cy = cx / scale, cy / scale
+			local angle = math.deg(math.atan2(cy - my, cx - mx))
+			if angle < 0 then angle = angle + 360 end
+			if type(oUF_BrunDB) ~= "table" then oUF_BrunDB = {} end
+			oUF_BrunDB.minimapPos = angle
+			UpdatePosition()
+		end)
+	end)
+
+	btn:SetScript("OnDragStop", function(self)
+		self.dragging = false
+		self:SetScript("OnUpdate", nil)
+	end)
+
+	btn:SetScript("OnClick", function(_, button)
+		if button == "RightButton" then
+			if ns.ToggleMovers then
+				ns.ToggleMovers()
+			end
+		else
+			ns.ToggleConfigGUI()
+		end
+	end)
+
+	btn:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		GameTooltip:AddLine("|cffff8000oUF_Brun|r")
+		GameTooltip:AddLine("Left-Click: |cffffffffToggle Settings Frame|r", 0.9, 0.9, 0.9)
+		GameTooltip:AddLine("Right-Click: |cffffffffUnlock / Lock Movers|r", 0.9, 0.9, 0.9)
+		GameTooltip:AddLine("Drag: |cffffffffMove Minimap Icon|r", 0.7, 0.7, 0.7)
+		GameTooltip:Show()
+	end)
+	btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+	minimapButton = btn
+	local opts = ns.GetOptionsDB()
+	btn:SetShown(opts.showMinimapIcon ~= false)
+end
+
+SLASH_OUFBRUN1 = "/brun"
+SLASH_OUFBRUN2 = "/oufbrun"
+SlashCmdList["OUFBRUN"] = function(msg)
+	msg = (msg or ""):lower():match("^%s*(.-)%s*$")
+	if msg == "move" or msg == "unlock" or msg == "lock" then
+		if ns.ToggleMovers then
+			ns.ToggleMovers()
+		end
+	elseif msg == "test" then
+		if ns.ToggleTestFrames then
+			ns.ToggleTestFrames()
+		end
+	else
+		ns.ToggleConfigGUI()
+	end
 end
