@@ -23,6 +23,7 @@ local DEFAULT_OPTIONS = {
 	targetThreatRawPct = false,
 	hideSelfInfo = true,
 	hidePartyInRaid = false,
+	partySpacing = 52,
 	showRaidFrames = true,
 	enableClickCast = false,
 	showPortraits = false,
@@ -205,6 +206,12 @@ function ns.GetBorderSize()
 	return 2
 end
 
+function ns.GetPartySpacing()
+	local spacing = tonumber(ns.GetOptionsDB().partySpacing)
+	if not spacing then return 62 end
+	return math.max(0, math.min(120, math.floor(spacing + 0.5)))
+end
+
 function ns.TrackStatusBar(bar)
 	if bar then
 		trackedStatusBars[bar] = true
@@ -317,6 +324,7 @@ local LIVE_OPTIONS = {
 	fontSizeOffset = true,
 	barAlpha = true,
 	borderSize = true,
+	partySpacing = true,
 }
 
 local TAB_OPTION_KEYS = {
@@ -337,7 +345,7 @@ local TAB_OPTION_KEYS = {
 		"desaturateOtherDebuffs", "highlightDispellableDebuffs", "highlightExpiringAuras",
 	},
 	group = {
-		"showRaidFrames", "hidePartyInRaid", "hideCompactRaidManager", "enableClickCast",
+		"showRaidFrames", "hidePartyInRaid", "hideCompactRaidManager", "partySpacing", "enableClickCast",
 	},
 	colors = {
 		"healthColorMode", "healthColorPlayerOnly",
@@ -1252,9 +1260,10 @@ function ns.ToggleConfigGUI()
 	end
 
 	-- Page 4: Party & Raid
+	local RefreshGroupUI
 	do
 		local p = pages.group
-		local card1 = CreateCard(p, "Group & Raid Layout", 110, 12)
+		local card1 = CreateCard(p, "Group & Raid Layout", 174, 12)
 		local groupToggles = {
 			{ key = "showRaidFrames", label = "Enable Raid Frames (8-Group Compact Grid)", tip = "Replace Blizzard raid frames with the compact 8-group oUF_Brun grid." },
 			{ key = "hidePartyInRaid", label = "Hide Party Frames when in a Raid", tip = "Hide the 4-member party stack automatically while in a raid group." },
@@ -1264,7 +1273,114 @@ function ns.ToggleConfigGUI()
 			CreateToggleRow(card1, def, i)
 		end
 
-		local card2 = CreateCard(p, "Healing & Click-Casting", 98, 134)
+		local spacingDivider = card1:CreateTexture(nil, "BORDER")
+		spacingDivider:SetPoint("TOPLEFT", 12, -112)
+		spacingDivider:SetPoint("TOPRIGHT", -12, -112)
+		spacingDivider:SetHeight(1)
+		spacingDivider:SetColorTexture(1, 1, 1, 0.06)
+
+		local spacingLabel = card1:CreateFontString(nil, "OVERLAY")
+		spacingLabel:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		spacingLabel:SetPoint("TOPLEFT", 14, -120)
+		spacingLabel:SetTextColor(0.92, 0.92, 0.95)
+		spacingLabel:SetText("Party Frame Spacing")
+
+		local spacingLive = card1:CreateFontString(nil, "OVERLAY")
+		spacingLive:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		spacingLive:SetPoint("TOPRIGHT", -14, -121)
+		spacingLive:SetTextColor(0.35, 0.78, 0.45)
+		spacingLive:SetText("LIVE")
+
+		local spacingVal = card1:CreateFontString(nil, "OVERLAY")
+		spacingVal:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		spacingVal:SetPoint("RIGHT", spacingLive, "LEFT", -10, 0)
+		spacingVal:SetJustifyH("RIGHT")
+		spacingVal:SetTextColor(1, 0.84, 0.45)
+
+		local spacingSlider = CreateFrame("Slider", nil, card1, BackdropTemplateMixin and "BackdropTemplate" or nil)
+		spacingSlider:SetPoint("TOPLEFT", 14, -140)
+		spacingSlider:SetPoint("TOPRIGHT", -14, -140)
+		spacingSlider:SetHeight(14)
+		spacingSlider:SetOrientation("HORIZONTAL")
+		spacingSlider:SetMinMaxValues(0, 120)
+		spacingSlider:SetValueStep(1)
+		if spacingSlider.SetObeyStepOnDrag then
+			spacingSlider:SetObeyStepOnDrag(true)
+		end
+		spacingSlider:EnableMouseWheel(true)
+
+		local track = CreateFrame("Frame", nil, card1, BackdropTemplateMixin and "BackdropTemplate" or nil)
+		track:SetPoint("LEFT", spacingSlider, "LEFT", 0, 0)
+		track:SetPoint("RIGHT", spacingSlider, "RIGHT", 0, 0)
+		track:SetHeight(6)
+		StyleFlatBox(track, 0.05, 0.05, 0.07, 1, 0.28, 0.28, 0.34, 1)
+		spacingSlider:SetFrameLevel(track:GetFrameLevel() + 2)
+
+		local thumb = spacingSlider:CreateTexture(nil, "OVERLAY")
+		thumb:SetSize(10, 14)
+		thumb:SetColorTexture(1, 0.56, 0.12, 1)
+		spacingSlider:SetThumbTexture(thumb)
+
+		local fill = track:CreateTexture(nil, "ARTWORK")
+		fill:SetPoint("TOPLEFT", track, "TOPLEFT", 1, -1)
+		fill:SetPoint("BOTTOM", track, "BOTTOM", 0, 1)
+		fill:SetPoint("RIGHT", thumb, "CENTER", 0, 0)
+		fill:SetColorTexture(0.85, 0.45, 0.08, 0.95)
+
+		local minLbl = card1:CreateFontString(nil, "OVERLAY")
+		minLbl:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		minLbl:SetPoint("TOPLEFT", 14, -157)
+		minLbl:SetTextColor(0.55, 0.55, 0.62)
+		minLbl:SetText("0 px")
+
+		local maxLbl = card1:CreateFontString(nil, "OVERLAY")
+		maxLbl:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		maxLbl:SetPoint("TOPRIGHT", -14, -157)
+		maxLbl:SetTextColor(0.55, 0.55, 0.62)
+		maxLbl:SetText("120 px")
+
+		spacingSlider:SetScript("OnEnter", function(self)
+			track:SetBackdropBorderColor(1, 0.56, 0.12, 1)
+			GameTooltip:SetOwner(self, "ANCHOR_TOP")
+			GameTooltip:AddLine("Party Frame Spacing", 1, 0.82, 0)
+			GameTooltip:AddLine("Vertical gap in pixels between party frames (0-120 px). Applies live out of combat (works with Test Frames).", 0.85, 0.85, 0.9, true)
+			GameTooltip:Show()
+		end)
+		spacingSlider:SetScript("OnLeave", function()
+			track:SetBackdropBorderColor(0.28, 0.28, 0.34, 1)
+			GameTooltip:Hide()
+		end)
+		spacingSlider:SetScript("OnMouseWheel", function(self, delta)
+			local cur = ns.GetPartySpacing()
+			local nextVal = math.max(0, math.min(120, cur + (delta > 0 and 1 or -1)))
+			self:SetValue(nextVal)
+		end)
+		spacingSlider:SetScript("OnValueChanged", function(self, value)
+			if self._updating then return end
+			local rounded = math.max(0, math.min(120, math.floor(value + 0.5)))
+			if value ~= rounded then
+				self._updating = true
+				self:SetValue(rounded)
+				self._updating = nil
+			end
+			ns.GetOptionsDB().partySpacing = rounded
+			spacingVal:SetText(rounded .. " px")
+			fill:SetShown(rounded > 0)
+			if ns.ApplyPartySpacing then
+				ns.ApplyPartySpacing()
+			end
+		end)
+
+		RefreshGroupUI = function()
+			local val = ns.GetPartySpacing()
+			spacingSlider._updating = true
+			spacingSlider:SetValue(val)
+			spacingSlider._updating = nil
+			spacingVal:SetText(val .. " px")
+			fill:SetShown(val > 0)
+		end
+
+		local card2 = CreateCard(p, "Healing & Click-Casting", 98, 198)
 		CreateToggleRow(card2, {
 			key = "enableClickCast",
 			label = "HealKit Smart Click-Casting (Party & Raid)",
@@ -1861,6 +1977,7 @@ function ns.ToggleConfigGUI()
 			cb:SetChecked(curOpts[k])
 		end
 		RefreshDependencies()
+		if RefreshGroupUI then RefreshGroupUI() end
 		if RefreshColorUI then RefreshColorUI() end
 		if RefreshThreatUI then RefreshThreatUI() end
 		if RefreshAppearanceUI then RefreshAppearanceUI() end

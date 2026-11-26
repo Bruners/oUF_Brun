@@ -1626,6 +1626,51 @@ local function ApplyThreatSettings()
 	end
 end
 
+local partySpacing = 62
+local partyAnchorRef
+local partyGroupRef
+local partySpacingCombatFrame
+local pendingPartySpacingUpdate = false
+
+local function ApplyPartySpacing()
+	partySpacing = ns.GetPartySpacing and ns.GetPartySpacing() or 62
+	if not partyGroupRef then return end
+	if InCombatLockdown() then
+		pendingPartySpacingUpdate = true
+		if not partySpacingCombatFrame then
+			partySpacingCombatFrame = CreateFrame("Frame")
+			partySpacingCombatFrame:SetScript("OnEvent", function(f)
+				f:UnregisterAllEvents()
+				if pendingPartySpacingUpdate then
+					pendingPartySpacingUpdate = false
+					ApplyPartySpacing()
+				end
+			end)
+		end
+		partySpacingCombatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+		return
+	end
+	pendingPartySpacingUpdate = false
+	local partyGroupHeight = partyHeight * 4 + partySpacing * 3
+	if partyAnchorRef then
+		partyAnchorRef:SetSize(partyWidth, partyGroupHeight)
+	end
+	partyGroupRef:SetSize(partyWidth, partyGroupHeight)
+	local prevParty
+	for i = 1, 4 do
+		local pf = _G["oUF_Party" .. i]
+		if pf then
+			pf:ClearAllPoints()
+			if prevParty then
+				pf:SetPoint("TOPLEFT", prevParty, "BOTTOMLEFT", 0, -partySpacing)
+			else
+				pf:SetPoint("TOPLEFT", partyGroupRef, "TOPLEFT", 0, 0)
+			end
+			prevParty = pf
+		end
+	end
+end
+
 local function ApplySavedOptions()
 	local opts = ns.GetOptionsDB()
 	enableFader = opts.enableFader
@@ -1694,6 +1739,7 @@ local function ApplySavedOptions()
 	end
 	ApplyHealthColors()
 	ApplyThreatSettings()
+	ApplyPartySpacing()
 	TEXTURE = ns.GetStatusBarTexture and ns.GetStatusBarTexture() or TEXTURE
 	FONT = ns.GetFontPath and ns.GetFontPath() or FONT
 	if ns.ApplyMedia then
@@ -2926,6 +2972,7 @@ ns.CreateAuraWidget = CreateAuraWidget
 ns.CreatePositionAnchor = CreatePositionAnchor
 ns.RegisterClickCastFrame = RegisterClickCastFrame
 ns.ApplySavedOptions = ApplySavedOptions
+ns.ApplyPartySpacing = ApplyPartySpacing
 ns.ApplyHealthColors = ApplyHealthColors
 ns.GetHealthColorMode = function() return healthColorMode end
 ns.UseClassHealthColor = function() return (healthColorMode ~= "blizzard") or healthColorPlayerOnly end
@@ -3039,10 +3086,12 @@ local function SpawnFrames(self)
 		RuneFrame:Show()
 	end
 
-	local partySpacing = 62
+	partySpacing = ns.GetPartySpacing and ns.GetPartySpacing() or 62
 	local partyGroupHeight = partyHeight * 4 + partySpacing * 3
 	local partyGroup = CreateFrame("Frame", "oUF_BrunPartyGroup", UIParent, "SecureHandlerStateTemplate")
 	local partyAnchor = CreatePositionAnchor("Party", partyWidth, partyGroupHeight, oUF_Brun.Party)
+	partyAnchorRef = partyAnchor
+	partyGroupRef = partyGroup
 	partyGroup:SetPoint("TOPLEFT", partyAnchor, "TOPLEFT", 0, 0)
 	partyGroup:SetSize(partyWidth, partyGroupHeight)
 
