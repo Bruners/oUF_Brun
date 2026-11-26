@@ -11,8 +11,8 @@ local nop = _G.nop or function() end
 
 local raidWidth = ns.raidWidth or 85
 local raidHeight = ns.raidHeight or 24
-local FONT = ns.FONT
-local TEXTURE = ns.TEXTURE
+local FONT = ns.GetFontPath and ns.GetFontPath() or ns.FONT
+local TEXTURE = ns.GetStatusBarTexture and ns.GetStatusBarTexture() or ns.TEXTURE
 local HIGHLIGHT = ns.HIGHLIGHT
 local RAID_FONT_SIZE = ns.RAID_FONT_SIZE or 10
 
@@ -106,9 +106,11 @@ local function CreateRaidStyle(self)
 	local hp = CreateFrame("StatusBar", nil, self)
 	hp:SetPoint("TOPRIGHT")
 	hp:SetPoint("TOPLEFT")
-	hp:SetStatusBarTexture(TEXTURE)
+	hp:SetStatusBarTexture(ns.GetStatusBarTexture and ns.GetStatusBarTexture() or TEXTURE)
+	if ns.TrackStatusBar then ns.TrackStatusBar(hp) end
 	hp:SetHeight(20)
-	hp:SetAlpha(0.8)
+	hp:SetAlpha(ns.GetBarAlpha and ns.GetBarAlpha() or 0.8)
+	if ns.TrackHealthBar then ns.TrackHealthBar(hp) end
 	hp.colorDisconnected = true
 	hp.colorTapping = true
 	hp.colorClass = (ns.UseClassHealthColor == nil) or ns.UseClassHealthColor()
@@ -131,12 +133,14 @@ local function CreateRaidStyle(self)
 
 	local hpbg = hp:CreateTexture(nil, "BORDER")
 	hpbg:SetAllPoints(self)
-	hpbg:SetTexture(TEXTURE)
+	hpbg:SetTexture(ns.GetStatusBarTexture and ns.GetStatusBarTexture() or TEXTURE)
+	if ns.TrackBarTexture then ns.TrackBarTexture(hpbg) end
 	hpbg:SetAlpha(0.3)
 	hp.bg = hpbg
 
 	local hpp = hp:CreateFontString(nil, "OVERLAY")
-	hpp:SetFont(FONT, RAID_FONT_SIZE, "OUTLINE")
+	hpp:SetFont(ns.GetFontPath and ns.GetFontPath() or FONT, math.max(7, RAID_FONT_SIZE + (ns.GetFontSizeOffset and ns.GetFontSizeOffset() or 0)), ns.GetFontFlags and ns.GetFontFlags() or "OUTLINE")
+	if ns.TrackFontString then ns.TrackFontString(hpp, RAID_FONT_SIZE) end
 	hpp:SetPoint("RIGHT", -1, 0)
 	hpp:SetTextColor(1, 1, 1)
 	hp.value = hpp
@@ -145,7 +149,8 @@ local function CreateRaidStyle(self)
 	local pp = CreateFrame("StatusBar", nil, self)
 	pp:SetPoint("TOPRIGHT", hp, "BOTTOMRIGHT", 0, -1)
 	pp:SetPoint("TOPLEFT", hp, "BOTTOMLEFT", 0, -1)
-	pp:SetStatusBarTexture(TEXTURE)
+	pp:SetStatusBarTexture(ns.GetStatusBarTexture and ns.GetStatusBarTexture() or TEXTURE)
+	if ns.TrackStatusBar then ns.TrackStatusBar(pp) end
 	pp:SetHeight(3)
 	pp.frequentUpdates = true
 	pp.colorDisconnected = true
@@ -157,7 +162,8 @@ local function CreateRaidStyle(self)
 
 	local ppbg = pp:CreateTexture(nil, "BORDER")
 	ppbg:SetAllPoints()
-	ppbg:SetTexture(TEXTURE)
+	ppbg:SetTexture(ns.GetStatusBarTexture and ns.GetStatusBarTexture() or TEXTURE)
+	if ns.TrackBarTexture then ns.TrackBarTexture(ppbg) end
 	ppbg:SetAlpha(0.3)
 	pp.bg = ppbg
 
@@ -211,7 +217,8 @@ local function CreateRaidStyle(self)
 	name:SetPoint("RIGHT", hpp, "LEFT", -4, 0)
 	name:SetWordWrap(false)
 	name:SetJustifyH("LEFT")
-	name:SetFont(FONT, RAID_FONT_SIZE, "OUTLINE")
+	name:SetFont(ns.GetFontPath and ns.GetFontPath() or FONT, math.max(7, RAID_FONT_SIZE + (ns.GetFontSizeOffset and ns.GetFontSizeOffset() or 0)), ns.GetFontFlags and ns.GetFontFlags() or "OUTLINE")
+	if ns.TrackFontString then ns.TrackFontString(name, RAID_FONT_SIZE) end
 	self.Name = name
 	self:Tag(name, "[brunraid_name][afkdnd]")
 
@@ -335,14 +342,16 @@ local function BuildRaidTestDummy(parent, groupIdx, memberIdx)
 	hp:SetPoint("TOPLEFT")
 	hp:SetPoint("TOPRIGHT")
 	hp:SetHeight(20)
-	hp:SetStatusBarTexture(TEXTURE)
+	hp:SetStatusBarTexture(ns.GetStatusBarTexture and ns.GetStatusBarTexture() or TEXTURE)
+	if ns.TrackStatusBar then ns.TrackStatusBar(hp) end
 	hp:SetMinMaxValues(0, 1)
 	hp:SetValue(hpPct)
 	hp:SetStatusBarColor(cr, cg, cb, 0.8)
 
 	local hpbg = hp:CreateTexture(nil, "BORDER")
 	hpbg:SetAllPoints(dummy)
-	hpbg:SetTexture(TEXTURE)
+	hpbg:SetTexture(ns.GetStatusBarTexture and ns.GetStatusBarTexture() or TEXTURE)
+	if ns.TrackBarTexture then ns.TrackBarTexture(hpbg) end
 	hpbg:SetVertexColor(cr, cg, cb, 0.3)
 
 	dummy.classToken = classToken
@@ -353,7 +362,8 @@ local function BuildRaidTestDummy(parent, groupIdx, memberIdx)
 	pp:SetPoint("TOPLEFT", hp, "BOTTOMLEFT", 0, -1)
 	pp:SetPoint("TOPRIGHT", hp, "BOTTOMRIGHT", 0, -1)
 	pp:SetHeight(3)
-	pp:SetStatusBarTexture(TEXTURE)
+	pp:SetStatusBarTexture(ns.GetStatusBarTexture and ns.GetStatusBarTexture() or TEXTURE)
+	if ns.TrackStatusBar then ns.TrackStatusBar(pp) end
 	pp:SetMinMaxValues(0, 1)
 	pp:SetValue(ppPct)
 	local pr, pg, pb = pwrColor:GetRGB()
@@ -361,11 +371,13 @@ local function BuildRaidTestDummy(parent, groupIdx, memberIdx)
 
 	local ppbg = pp:CreateTexture(nil, "BORDER")
 	ppbg:SetAllPoints()
-	ppbg:SetTexture(TEXTURE)
+	ppbg:SetTexture(ns.GetStatusBarTexture and ns.GetStatusBarTexture() or TEXTURE)
+	if ns.TrackBarTexture then ns.TrackBarTexture(ppbg) end
 	ppbg:SetVertexColor(pr, pg, pb, 0.3)
 
 	local statusStr = hp:CreateFontString(nil, "OVERLAY")
-	statusStr:SetFont(FONT, RAID_FONT_SIZE, "OUTLINE")
+	statusStr:SetFont(ns.GetFontPath and ns.GetFontPath() or FONT, math.max(7, RAID_FONT_SIZE + (ns.GetFontSizeOffset and ns.GetFontSizeOffset() or 0)), ns.GetFontFlags and ns.GetFontFlags() or "OUTLINE")
+	if ns.TrackFontString then ns.TrackFontString(statusStr, RAID_FONT_SIZE) end
 	statusStr:SetPoint("RIGHT", -1, 0)
 	if statusTxt then
 		statusStr:SetText(statusTxt)
@@ -376,7 +388,8 @@ local function BuildRaidTestDummy(parent, groupIdx, memberIdx)
 	end
 
 	local nameStr = hp:CreateFontString(nil, "OVERLAY")
-	nameStr:SetFont(FONT, RAID_FONT_SIZE, "OUTLINE")
+	nameStr:SetFont(ns.GetFontPath and ns.GetFontPath() or FONT, math.max(7, RAID_FONT_SIZE + (ns.GetFontSizeOffset and ns.GetFontSizeOffset() or 0)), ns.GetFontFlags and ns.GetFontFlags() or "OUTLINE")
+	if ns.TrackFontString then ns.TrackFontString(nameStr, RAID_FONT_SIZE) end
 	nameStr:SetPoint("LEFT", 2, 0)
 	nameStr:SetPoint("RIGHT", statusStr, "LEFT", -4, 0)
 	nameStr:SetJustifyH("LEFT")

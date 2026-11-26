@@ -52,6 +52,12 @@ local DEFAULT_OPTIONS = {
 	useComboDots = false,
 	healthColorMode = "class",
 	healthColorPlayerOnly = false,
+	statusBarTexture = "oUF_Brun",
+	fontName = "oUF_Brun",
+	fontOutline = "OUTLINE",
+	fontSizeOffset = 0,
+	barAlpha = 0.8,
+	borderSize = 2,
 	showMinimapIcon = true,
 }
 
@@ -81,6 +87,216 @@ function ns.GetOptionsDB()
 	return opts
 end
 
+--===================================================--
+-- LibSharedMedia-3.0 Integration & Live Media Engine
+--===================================================--
+
+local DEFAULT_TEXTURE = "Interface\\Addons\\oUF_Brun\\textures\\Statusbar"
+local DEFAULT_FONT = "Interface\\Addons\\oUF_Brun\\textures\\Font.ttf"
+
+local BUILTIN_STATUSBARS = {
+	["oUF_Brun"] = DEFAULT_TEXTURE,
+	["Flat"] = "Interface\\Buttons\\WHITE8X8",
+	["Blizzard"] = "Interface\\TargetingFrame\\UI-StatusBar",
+	["Blizzard Raid"] = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill",
+	["Blizzard Smooth"] = "Interface\\PaperDollInfoFrame\\UI-Character-Skills-Bar",
+}
+
+local BUILTIN_FONTS = {
+	["oUF_Brun"] = DEFAULT_FONT,
+	["Friz Quadrata"] = "Fonts\\FRIZQT__.TTF",
+	["Arial Narrow"] = "Fonts\\ARIALN.TTF",
+	["Morpheus"] = "Fonts\\MORPHEUS.TTF",
+	["Skurri"] = "Fonts\\SKURRI.TTF",
+}
+
+local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+if LSM then
+	if LSM.Register then
+		LSM:Register("statusbar", "oUF_Brun", DEFAULT_TEXTURE)
+		LSM:Register("font", "oUF_Brun", DEFAULT_FONT)
+	end
+	if LSM.RegisterCallback then
+		LSM.RegisterCallback(ns, "LibSharedMedia_Registered", function(_, mediatype, key)
+			if mediatype == "statusbar" or mediatype == "font" then
+				local opts = ns.GetOptionsDB()
+				if (mediatype == "statusbar" and key == opts.statusBarTexture) or (mediatype == "font" and key == opts.fontName) then
+					if ns.ApplyMedia then ns.ApplyMedia() end
+				end
+			end
+		end)
+	end
+end
+
+local trackedStatusBars = setmetatable({}, { __mode = "k" })
+local trackedBarTextures = setmetatable({}, { __mode = "k" })
+local trackedFontStrings = setmetatable({}, { __mode = "k" })
+local trackedHealthBars = setmetatable({}, { __mode = "k" })
+local trackedBackdrops = setmetatable({}, { __mode = "k" })
+
+function ns.IsLSMAvailable()
+	return LSM ~= nil
+end
+
+function ns.GetMediaList(mediaType)
+	if LSM and LSM.List then
+		local list = LSM:List(mediaType)
+		if type(list) == "table" and #list > 0 then
+			return list
+		end
+	end
+	local src = (mediaType == "font") and BUILTIN_FONTS or BUILTIN_STATUSBARS
+	local out = {}
+	for k in pairs(src) do
+		table.insert(out, k)
+	end
+	table.sort(out)
+	return out
+end
+
+function ns.FetchMedia(mediaType, key)
+	if LSM and LSM.Fetch and key then
+		local path = LSM:Fetch(mediaType, key, true)
+		if path and path ~= "" then
+			return path
+		end
+	end
+	local src = (mediaType == "font") and BUILTIN_FONTS or BUILTIN_STATUSBARS
+	if key and src[key] then
+		return src[key]
+	end
+	return (mediaType == "font") and DEFAULT_FONT or DEFAULT_TEXTURE
+end
+
+function ns.GetStatusBarTexture()
+	local opts = ns.GetOptionsDB()
+	return ns.FetchMedia("statusbar", opts.statusBarTexture)
+end
+
+function ns.GetFontPath()
+	local opts = ns.GetOptionsDB()
+	return ns.FetchMedia("font", opts.fontName)
+end
+
+function ns.GetFontFlags()
+	local flag = ns.GetOptionsDB().fontOutline
+	if flag == "" or flag == "OUTLINE" or flag == "THICKOUTLINE" or flag == "MONOCHROME, OUTLINE" then
+		return flag
+	end
+	return "OUTLINE"
+end
+
+function ns.GetFontSizeOffset()
+	local off = tonumber(ns.GetOptionsDB().fontSizeOffset) or 0
+	return math.max(-3, math.min(4, math.floor(off + 0.5)))
+end
+
+function ns.GetBarAlpha()
+	local a = tonumber(ns.GetOptionsDB().barAlpha)
+	if not a then return 0.8 end
+	return math.max(0.5, math.min(1.0, a))
+end
+
+function ns.GetBorderSize()
+	local b = tonumber(ns.GetOptionsDB().borderSize)
+	if b == 1 or b == 2 or b == 3 then
+		return b
+	end
+	return 2
+end
+
+function ns.TrackStatusBar(bar)
+	if bar then
+		trackedStatusBars[bar] = true
+	end
+	return bar
+end
+
+function ns.TrackBarTexture(tex)
+	if tex then
+		trackedBarTextures[tex] = true
+	end
+	return tex
+end
+
+function ns.TrackFontString(fs, baseSize)
+	if fs then
+		trackedFontStrings[fs] = baseSize or 12
+	end
+	return fs
+end
+
+function ns.TrackHealthBar(hp)
+	if hp then
+		trackedHealthBars[hp] = true
+	end
+	return hp
+end
+
+function ns.TrackBackdropFrame(frame)
+	if frame then
+		trackedBackdrops[frame] = true
+	end
+	return frame
+end
+
+function ns.GetTrackedBackdrops()
+	return trackedBackdrops
+end
+
+function ns.ApplyMedia()
+	local texPath = ns.GetStatusBarTexture()
+	local fontPath = ns.GetFontPath()
+	local flags = ns.GetFontFlags()
+	local offset = ns.GetFontSizeOffset()
+	local alpha = ns.GetBarAlpha()
+	local borderSize = ns.GetBorderSize()
+
+	ns.TEXTURE = texPath
+	ns.FONT = fontPath
+
+	for bar in pairs(trackedStatusBars) do
+		if bar.SetStatusBarTexture then
+			bar:SetStatusBarTexture(texPath)
+		end
+	end
+	for tex in pairs(trackedBarTextures) do
+		if tex.SetTexture then
+			tex:SetTexture(texPath)
+		end
+	end
+	for hp in pairs(trackedHealthBars) do
+		if hp.SetAlpha then
+			hp:SetAlpha(alpha)
+		end
+	end
+	for fs, baseSize in pairs(trackedFontStrings) do
+		if fs.SetFont then
+			local sz = math.max(7, (baseSize or 12) + offset)
+			if not fs:SetFont(fontPath, sz, flags) then
+				fs:SetFont(DEFAULT_FONT, sz, flags)
+			end
+		end
+	end
+
+	if ns.ApplyBackdropBorderSize then
+		ns.ApplyBackdropBorderSize(borderSize)
+	end
+	if ns.ApplyHealthColors then
+		ns.ApplyHealthColors()
+	end
+	if oUF and oUF.objects then
+		for _, obj in ipairs(oUF.objects) do
+			if obj.Power and obj.Power.ForceUpdate then
+				obj.Power:ForceUpdate()
+			end
+		end
+	end
+	if ns.ApplyThreatSettings then
+		ns.ApplyThreatSettings()
+	end
+end
+
 local LIVE_OPTIONS = {
 	firstNameOnly = true,
 	shortRaceNames = true,
@@ -95,6 +311,12 @@ local LIVE_OPTIONS = {
 	highlightDispellableDebuffs = true,
 	healthColorMode = true,
 	healthColorPlayerOnly = true,
+	statusBarTexture = true,
+	fontName = true,
+	fontOutline = true,
+	fontSizeOffset = true,
+	barAlpha = true,
+	borderSize = true,
 }
 
 local TAB_OPTION_KEYS = {
@@ -122,6 +344,9 @@ local TAB_OPTION_KEYS = {
 	},
 	threat = {
 		"enableThreatHighlight", "threatStyle", "showTargetThreat", "targetThreatRawPct",
+	},
+	appearance = {
+		"statusBarTexture", "fontName", "fontOutline", "fontSizeOffset", "barAlpha", "borderSize",
 	},
 }
 
@@ -644,7 +869,167 @@ function ns.ToggleConfigGUI()
 		end
 	end
 
-	-- Build 6 category pages
+	-- Virtualized dropdown picker for LibSharedMedia statusbars & fonts
+	local dropdownCloseOverlay = CreateFrame("Button", nil, UIParent)
+	dropdownCloseOverlay:SetAllPoints(UIParent)
+	dropdownCloseOverlay:SetFrameStrata("FULLSCREEN_DIALOG")
+	dropdownCloseOverlay:EnableMouse(true)
+	dropdownCloseOverlay:Hide()
+
+	local mediaDropdown = CreateFrame("Frame", nil, dropdownCloseOverlay, BackdropTemplateMixin and "BackdropTemplate" or nil)
+	mediaDropdown:SetSize(244, 208)
+	mediaDropdown:SetFrameLevel(dropdownCloseOverlay:GetFrameLevel() + 2)
+	mediaDropdown:EnableMouse(true)
+	mediaDropdown:EnableMouseWheel(true)
+	StyleFlatBox(mediaDropdown, 0.05, 0.05, 0.07, 0.98, 0.34, 0.34, 0.42, 1)
+
+	local VISIBLE_ROWS = 9
+	local dropdownItems = {}
+	local dropdownOffset = 0
+	local dropdownMediaType = "statusbar"
+	local dropdownSelectedKey = nil
+	local dropdownOnSelect = nil
+	local dropdownAnchor = nil
+	local dropdownRows = {}
+
+	local scrollTrack = mediaDropdown:CreateTexture(nil, "BORDER")
+	scrollTrack:SetPoint("TOPRIGHT", -4, -6)
+	scrollTrack:SetPoint("BOTTOMRIGHT", -4, 6)
+	scrollTrack:SetWidth(3)
+	scrollTrack:SetColorTexture(1, 1, 1, 0.08)
+
+	local scrollThumb = mediaDropdown:CreateTexture(nil, "ARTWORK")
+	scrollThumb:SetWidth(3)
+	scrollThumb:SetColorTexture(1, 0.55, 0.1, 0.85)
+
+	local function CloseMediaDropdown()
+		dropdownCloseOverlay:Hide()
+		dropdownAnchor = nil
+	end
+
+	dropdownCloseOverlay:SetScript("OnClick", CloseMediaDropdown)
+
+	local function RefreshMediaDropdownRows()
+		local total = #dropdownItems
+		local maxOff = math.max(0, total - VISIBLE_ROWS)
+		dropdownOffset = math.max(0, math.min(dropdownOffset, maxOff))
+
+		local showScroll = (total > VISIBLE_ROWS)
+		scrollTrack:SetShown(showScroll)
+		scrollThumb:SetShown(showScroll)
+		if showScroll then
+			local trackH = 196
+			local thumbH = math.max(18, math.floor(trackH * (VISIBLE_ROWS / total)))
+			local travel = trackH - thumbH
+			local ratio = (maxOff > 0) and (dropdownOffset / maxOff) or 0
+			scrollThumb:ClearAllPoints()
+			scrollThumb:SetHeight(thumbH)
+			scrollThumb:SetPoint("TOPRIGHT", mediaDropdown, "TOPRIGHT", -4, -(6 + ratio * travel))
+		end
+
+		for i = 1, VISIBLE_ROWS do
+			local row = dropdownRows[i]
+			local key = dropdownItems[dropdownOffset + i]
+			if key then
+				row._key = key
+				local isSelected = (key == dropdownSelectedKey)
+				row.activeBg:SetShown(isSelected)
+				if dropdownMediaType == "statusbar" then
+					row.previewBar:SetTexture(ns.FetchMedia("statusbar", key))
+					row.previewBar:SetVertexColor(isSelected and 1 or 0.35, isSelected and 0.56 or 0.52, isSelected and 0.12 or 0.68, 0.55)
+					row.previewBar:Show()
+					row.label:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+				else
+					row.previewBar:Hide()
+					if not row.label:SetFont(ns.FetchMedia("font", key), SMALL_FONT_SIZE, "OUTLINE") then
+						row.label:SetFont(DEFAULT_FONT, SMALL_FONT_SIZE, "OUTLINE")
+					end
+				end
+				row.label:SetText(key)
+				row.label:SetTextColor(isSelected and 1 or 0.92, isSelected and 0.84 or 0.92, isSelected and 0.45 or 0.95)
+				row:Show()
+			else
+				row._key = nil
+				row:Hide()
+			end
+		end
+	end
+
+	for i = 1, VISIBLE_ROWS do
+		local row = CreateFrame("Button", nil, mediaDropdown)
+		row:SetPoint("TOPLEFT", 5, -(5 + (i - 1) * 22))
+		row:SetPoint("TOPRIGHT", -11, -(5 + (i - 1) * 22))
+		row:SetHeight(21)
+
+		local previewBar = row:CreateTexture(nil, "BACKGROUND")
+		previewBar:SetPoint("TOPLEFT", 1, -1)
+		previewBar:SetPoint("BOTTOMRIGHT", -1, 1)
+		previewBar:Hide()
+		row.previewBar = previewBar
+
+		local activeBg = row:CreateTexture(nil, "BORDER")
+		activeBg:SetAllPoints()
+		activeBg:SetColorTexture(1, 0.5, 0, 0.22)
+		activeBg:Hide()
+		row.activeBg = activeBg
+
+		local hoverBg = row:CreateTexture(nil, "BORDER")
+		hoverBg:SetAllPoints()
+		hoverBg:SetColorTexture(1, 1, 1, 0.08)
+		hoverBg:Hide()
+
+		local label = row:CreateFontString(nil, "OVERLAY")
+		label:SetPoint("LEFT", 6, 0)
+		label:SetPoint("RIGHT", -6, 0)
+		label:SetJustifyH("LEFT")
+		label:SetWordWrap(false)
+		label:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		row.label = label
+
+		row:SetScript("OnEnter", function() hoverBg:Show() end)
+		row:SetScript("OnLeave", function() hoverBg:Hide() end)
+		row:SetScript("OnClick", function(self)
+			if self._key and dropdownOnSelect then
+				local chosen = self._key
+				local cb = dropdownOnSelect
+				CloseMediaDropdown()
+				cb(chosen)
+			end
+		end)
+		dropdownRows[i] = row
+	end
+
+	mediaDropdown:SetScript("OnMouseWheel", function(_, delta)
+		dropdownOffset = dropdownOffset - (delta > 0 and 2 or -2)
+		RefreshMediaDropdownRows()
+	end)
+
+	local function OpenMediaDropdown(anchorBtn, mediaType, currentKey, onSelect)
+		if dropdownCloseOverlay:IsShown() and dropdownAnchor == anchorBtn then
+			CloseMediaDropdown()
+			return
+		end
+		dropdownAnchor = anchorBtn
+		dropdownMediaType = mediaType
+		dropdownSelectedKey = currentKey
+		dropdownOnSelect = onSelect
+		dropdownItems = ns.GetMediaList(mediaType)
+		dropdownOffset = 0
+		for idx, itemKey in ipairs(dropdownItems) do
+			if itemKey == currentKey then
+				dropdownOffset = math.max(0, idx - 4)
+				break
+			end
+		end
+		local listH = math.min(VISIBLE_ROWS, math.max(1, #dropdownItems)) * 22 + 10
+		mediaDropdown:SetSize(244, listH)
+		mediaDropdown:ClearAllPoints()
+		mediaDropdown:SetPoint("TOPLEFT", anchorBtn, "BOTTOMLEFT", 0, -2)
+		RefreshMediaDropdownRows()
+		dropdownCloseOverlay:Show()
+	end
+
+	-- Build 7 category pages
 	local tabs = {
 		{ id = "general", label = "General" },
 		{ id = "frames", label = "Unit Frames" },
@@ -652,6 +1037,7 @@ function ns.ToggleConfigGUI()
 		{ id = "group", label = "Party & Raid" },
 		{ id = "colors", label = "Colors" },
 		{ id = "threat", label = "Aggro & Threat" },
+		{ id = "appearance", label = "Appearance" },
 	}
 	local pages = {}
 	local tabButtons = {}
@@ -659,6 +1045,7 @@ function ns.ToggleConfigGUI()
 	local activeTabId = "general"
 
 	local function SelectTab(tabId)
+		CloseMediaDropdown()
 		activeTabId = tabId
 		for id, page in pairs(pages) do
 			page:SetShown(id == tabId)
@@ -1220,6 +1607,255 @@ function ns.ToggleConfigGUI()
 		end
 	end
 
+	-- Page 7: Appearance (LibSharedMedia-3.0 + Font/Bar/Border Style)
+	local RefreshAppearanceUI
+	do
+		local p = pages.appearance
+		local card1 = CreateCard(p, "Textures & Fonts", 122, 10)
+
+		local lsmBadge = card1:CreateFontString(nil, "OVERLAY")
+		lsmBadge:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		lsmBadge:SetPoint("TOPRIGHT", -12, -11)
+		if ns.IsLSMAvailable() then
+			lsmBadge:SetTextColor(0.35, 0.78, 0.45)
+			lsmBadge:SetText("LSM Active")
+		else
+			lsmBadge:SetTextColor(0.6, 0.6, 0.66)
+			lsmBadge:SetText("Built-in Media")
+		end
+
+		local function CreateMediaSelector(yOff, labelText, mediaType, onChosen)
+			local lbl = card1:CreateFontString(nil, "OVERLAY")
+			lbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+			lbl:SetPoint("TOPLEFT", 14, -(yOff + 5))
+			lbl:SetTextColor(0.92, 0.92, 0.95)
+			lbl:SetText(labelText)
+
+			local btn = CreateFrame("Button", nil, card1, BackdropTemplateMixin and "BackdropTemplate" or nil)
+			btn:SetSize(244, 24)
+			btn:SetPoint("TOPRIGHT", -14, -yOff)
+			StyleFlatBox(btn, 0.11, 0.11, 0.14, 1, 0.30, 0.30, 0.36, 1)
+
+			if mediaType == "statusbar" then
+				local preview = btn:CreateTexture(nil, "BACKGROUND")
+				preview:SetPoint("TOPLEFT", 2, -2)
+				preview:SetPoint("BOTTOMRIGHT", -2, 2)
+				preview:SetVertexColor(0.28, 0.48, 0.72, 0.55)
+				btn.preview = preview
+			end
+
+			local valText = btn:CreateFontString(nil, "OVERLAY")
+			valText:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+			valText:SetPoint("LEFT", 8, 0)
+			valText:SetPoint("RIGHT", -22, 0)
+			valText:SetJustifyH("LEFT")
+			valText:SetWordWrap(false)
+			valText:SetTextColor(1, 1, 1)
+			btn.valText = valText
+
+			local arrow = btn:CreateFontString(nil, "OVERLAY")
+			arrow:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+			arrow:SetPoint("RIGHT", -8, 0)
+			arrow:SetTextColor(0.75, 0.75, 0.82)
+			arrow:SetText("v")
+
+			btn:SetScript("OnEnter", function(self)
+				self:SetBackdropBorderColor(1, 0.56, 0.12, 1)
+			end)
+			btn:SetScript("OnLeave", function(self)
+				self:SetBackdropBorderColor(0.30, 0.30, 0.36, 1)
+			end)
+			btn:SetScript("OnClick", function(self)
+				local cur = (mediaType == "statusbar") and ns.GetOptionsDB().statusBarTexture or ns.GetOptionsDB().fontName
+				OpenMediaDropdown(self, mediaType, cur, function(chosen)
+					onChosen(chosen)
+					ns.ApplyMedia()
+					RefreshAppearanceUI()
+				end)
+			end)
+
+			return btn
+		end
+
+		local texBtn = CreateMediaSelector(35, "Bar Texture", "statusbar", function(chosen)
+			ns.GetOptionsDB().statusBarTexture = chosen
+		end)
+		local fontBtn = CreateMediaSelector(67, "Font", "font", function(chosen)
+			ns.GetOptionsDB().fontName = chosen
+		end)
+
+		local lsmNote = card1:CreateFontString(nil, "OVERLAY")
+		lsmNote:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
+		lsmNote:SetPoint("TOPLEFT", 14, -99)
+		lsmNote:SetPoint("TOPRIGHT", -12, -99)
+		lsmNote:SetJustifyH("LEFT")
+		lsmNote:SetTextColor(0.62, 0.62, 0.68)
+		lsmNote:SetText(ns.IsLSMAvailable()
+			and "LibSharedMedia-3.0 active: shared textures & fonts apply live."
+			or "Using built-in media. Add SharedMedia / LSM-3.0 addons for more.")
+
+		local card2 = CreateCard(p, "Typography & Frame Style", 200, 142)
+
+		local liveBadge2 = card2:CreateFontString(nil, "OVERLAY")
+		liveBadge2:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		liveBadge2:SetPoint("TOPRIGHT", -12, -11)
+		liveBadge2:SetTextColor(0.35, 0.78, 0.45)
+		liveBadge2:SetText("LIVE")
+
+		-- Row 1: Font Outline
+		local outlineLbl = card2:CreateFontString(nil, "OVERLAY")
+		outlineLbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		outlineLbl:SetPoint("TOPLEFT", 14, -41)
+		outlineLbl:SetTextColor(0.92, 0.92, 0.95)
+		outlineLbl:SetText("Font Outline")
+
+		local outlineBtns = {}
+		local outlineDefs = {
+			{ id = "", label = "None", w = 54 },
+			{ id = "OUTLINE", label = "Outline", w = 62 },
+			{ id = "THICKOUTLINE", label = "Thick", w = 56 },
+			{ id = "MONOCHROME, OUTLINE", label = "Mono", w = 54 },
+		}
+		for i = #outlineDefs, 1, -1 do
+			local def = outlineDefs[i]
+			local b = CreateActionButton(card2, def.label, def.w, 22, function()
+				ns.GetOptionsDB().fontOutline = def.id
+				ns.ApplyMedia()
+				RefreshAppearanceUI()
+			end)
+			if i == #outlineDefs then
+				b:SetPoint("TOPRIGHT", -14, -36)
+			else
+				b:SetPoint("RIGHT", outlineBtns[i + 1], "LEFT", -6, 0)
+			end
+			b.outlineId = def.id
+			outlineBtns[i] = b
+		end
+
+		-- Row 2: Font Size Adjust
+		local sizeLbl = card2:CreateFontString(nil, "OVERLAY")
+		sizeLbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		sizeLbl:SetPoint("TOPLEFT", 14, -81)
+		sizeLbl:SetTextColor(0.92, 0.92, 0.95)
+		sizeLbl:SetText("Font Size Adjust")
+
+		local sizePlus = CreateActionButton(card2, "+", 28, 22, function()
+			local opts = ns.GetOptionsDB()
+			opts.fontSizeOffset = math.min(4, ns.GetFontSizeOffset() + 1)
+			ns.ApplyMedia()
+			RefreshAppearanceUI()
+		end)
+		sizePlus:SetPoint("TOPRIGHT", -14, -76)
+
+		local sizeVal = card2:CreateFontString(nil, "OVERLAY")
+		sizeVal:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		sizeVal:SetWidth(90)
+		sizeVal:SetPoint("RIGHT", sizePlus, "LEFT", -6, 0)
+		sizeVal:SetJustifyH("CENTER")
+		sizeVal:SetTextColor(1, 0.84, 0.45)
+
+		local sizeMinus = CreateActionButton(card2, "-", 28, 22, function()
+			local opts = ns.GetOptionsDB()
+			opts.fontSizeOffset = math.max(-3, ns.GetFontSizeOffset() - 1)
+			ns.ApplyMedia()
+			RefreshAppearanceUI()
+		end)
+		sizeMinus:SetPoint("RIGHT", sizeVal, "LEFT", -6, 0)
+
+		-- Row 3: Health Bar Opacity
+		local alphaLbl = card2:CreateFontString(nil, "OVERLAY")
+		alphaLbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		alphaLbl:SetPoint("TOPLEFT", 14, -121)
+		alphaLbl:SetTextColor(0.92, 0.92, 0.95)
+		alphaLbl:SetText("Health Bar Opacity")
+
+		local alphaPlus = CreateActionButton(card2, "+", 28, 22, function()
+			local opts = ns.GetOptionsDB()
+			opts.barAlpha = math.min(1.0, math.floor((ns.GetBarAlpha() + 0.05) * 20 + 0.5) / 20)
+			ns.ApplyMedia()
+			RefreshAppearanceUI()
+		end)
+		alphaPlus:SetPoint("TOPRIGHT", -14, -116)
+
+		local alphaVal = card2:CreateFontString(nil, "OVERLAY")
+		alphaVal:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		alphaVal:SetWidth(90)
+		alphaVal:SetPoint("RIGHT", alphaPlus, "LEFT", -6, 0)
+		alphaVal:SetJustifyH("CENTER")
+		alphaVal:SetTextColor(1, 0.84, 0.45)
+
+		local alphaMinus = CreateActionButton(card2, "-", 28, 22, function()
+			local opts = ns.GetOptionsDB()
+			opts.barAlpha = math.max(0.5, math.floor((ns.GetBarAlpha() - 0.05) * 20 + 0.5) / 20)
+			ns.ApplyMedia()
+			RefreshAppearanceUI()
+		end)
+		alphaMinus:SetPoint("RIGHT", alphaVal, "LEFT", -6, 0)
+
+		-- Row 4: Frame Border Size
+		local borderLbl = card2:CreateFontString(nil, "OVERLAY")
+		borderLbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		borderLbl:SetPoint("TOPLEFT", 14, -161)
+		borderLbl:SetTextColor(0.92, 0.92, 0.95)
+		borderLbl:SetText("Frame Border Size")
+
+		local borderBtns = {}
+		local borderDefs = {
+			{ size = 1, label = "1px" },
+			{ size = 2, label = "2px" },
+			{ size = 3, label = "3px" },
+		}
+		for i = #borderDefs, 1, -1 do
+			local def = borderDefs[i]
+			local b = CreateActionButton(card2, def.label, 74, 22, function()
+				ns.GetOptionsDB().borderSize = def.size
+				ns.ApplyMedia()
+				RefreshAppearanceUI()
+			end)
+			if i == #borderDefs then
+				b:SetPoint("TOPRIGHT", -14, -156)
+			else
+				b:SetPoint("RIGHT", borderBtns[i + 1], "LEFT", -8, 0)
+			end
+			b.borderSize = def.size
+			borderBtns[i] = b
+		end
+
+		RefreshAppearanceUI = function()
+			local opts = ns.GetOptionsDB()
+			local texKey = opts.statusBarTexture or "oUF_Brun"
+			texBtn.preview:SetTexture(ns.FetchMedia("statusbar", texKey))
+			texBtn.valText:SetText(texKey)
+
+			local fKey = opts.fontName or "oUF_Brun"
+			if not fontBtn.valText:SetFont(ns.FetchMedia("font", fKey), SMALL_FONT_SIZE, "OUTLINE") then
+				fontBtn.valText:SetFont(DEFAULT_FONT, SMALL_FONT_SIZE, "OUTLINE")
+			end
+			fontBtn.valText:SetText(fKey)
+
+			local flags = ns.GetFontFlags()
+			for _, b in ipairs(outlineBtns) do
+				b:SetActive(b.outlineId == flags)
+			end
+
+			local offset = ns.GetFontSizeOffset()
+			if offset == 0 then
+				sizeVal:SetText("Default (0)")
+			elseif offset > 0 then
+				sizeVal:SetText("+" .. offset .. " pt")
+			else
+				sizeVal:SetText(offset .. " pt")
+			end
+
+			alphaVal:SetText(string.format("%d%%", math.floor(ns.GetBarAlpha() * 100 + 0.5)))
+
+			local bSize = ns.GetBorderSize()
+			for _, b in ipairs(borderBtns) do
+				b:SetActive(b.borderSize == bSize)
+			end
+		end
+	end
+
 	local function SyncAllControls(curOpts, markReload)
 		for k, cb in pairs(checkboxes) do
 			cb:SetChecked(curOpts[k])
@@ -1227,6 +1863,7 @@ function ns.ToggleConfigGUI()
 		RefreshDependencies()
 		if RefreshColorUI then RefreshColorUI() end
 		if RefreshThreatUI then RefreshThreatUI() end
+		if RefreshAppearanceUI then RefreshAppearanceUI() end
 		if markReload then
 			reloadNeeded = true
 		end
@@ -1323,6 +1960,7 @@ function ns.ToggleConfigGUI()
 		ns.UpdateMoverBtnState()
 		ns.UpdateTestBtnState()
 	end)
+	f:SetScript("OnHide", CloseMediaDropdown)
 
 	configFrame = f
 end

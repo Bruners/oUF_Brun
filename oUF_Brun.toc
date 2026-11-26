@@ -6,6 +6,7 @@
 ## AllowLoadGameType: standard, camelot
 ## SavedVariables: oUF_BrunDB
 ## RequiredDeps: oUF
+## OptionalDeps: LibSharedMedia-3.0, SharedMedia
 ## Notes: oUF 14.3+ layout for WoW Forever and Retail
 
 oUF_BrunTags.lua

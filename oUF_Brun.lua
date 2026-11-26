@@ -66,8 +66,8 @@ ns.shortRaceNames = shortRaceNames
 local FONT_SIZE = 14					-- Largest font on frames (most frames)
 local SMALL_FONT_SIZE = 12				-- Smallest font on frames (target's target)
 
-local FONT = "Interface\\Addons\\oUF_Brun\\textures\\Font.ttf"
-local TEXTURE = "Interface\\Addons\\oUF_Brun\\textures\\Statusbar"
+local FONT = ns.GetFontPath and ns.GetFontPath() or "Interface\\Addons\\oUF_Brun\\textures\\Font.ttf"
+local TEXTURE = ns.GetStatusBarTexture and ns.GetStatusBarTexture() or "Interface\\Addons\\oUF_Brun\\textures\\Statusbar"
 local BORDER_TEXTURE = "Interface\\Addons\\oUF_Brun\\textures\\border"
 local GLOSS_TEXTURE = "Interface\\Addons\\oUF_Brun\\textures\\gloss"
 local HIGHLIGHT = "Interface\\QuestFrame\\UI-QuestTitleHighlight"
@@ -129,8 +129,30 @@ local backdrop = {
 	insets = { left = -2, right = -2, top = -2, bottom = -2 },
 }
 
+local function ApplyBackdropBorderSize(size)
+	size = (size == 1 or size == 2 or size == 3) and size or 2
+	backdrop.insets.left = -size
+	backdrop.insets.right = -size
+	backdrop.insets.top = -size
+	backdrop.insets.bottom = -size
+	local tracked = ns.GetTrackedBackdrops and ns.GetTrackedBackdrops()
+	if tracked then
+		for frame in pairs(tracked) do
+			if frame.SetBackdrop then
+				frame:SetBackdrop(backdrop)
+				frame:SetBackdropColor(0, 0, 0, 0.9)
+			end
+		end
+	end
+end
+
 -- Mixin BackdropTemplate dynamically because WoW decoupled SetBackdrop from native Frame/StatusBar widgets.
 local function ApplyBackdrop(frame)
+	local bSize = ns.GetBorderSize and ns.GetBorderSize() or 2
+	backdrop.insets.left = -bSize
+	backdrop.insets.right = -bSize
+	backdrop.insets.top = -bSize
+	backdrop.insets.bottom = -bSize
 	if not frame.SetBackdrop and BackdropTemplateMixin then
 		Mixin(frame, BackdropTemplateMixin)
 		if frame.OnBackdropLoaded then
@@ -140,6 +162,9 @@ local function ApplyBackdrop(frame)
 	if frame.SetBackdrop then
 		frame:SetBackdrop(backdrop)
 		frame:SetBackdropColor(0, 0, 0, 0.9)
+		if ns.TrackBackdropFrame then
+			ns.TrackBackdropFrame(frame)
+		end
 	end
 end
 
@@ -365,6 +390,9 @@ local function StyleAuraButton(element, button, options)
 		end
 	end
 
+	local fontFlags = ns.GetFontFlags and ns.GetFontFlags() or "OUTLINE"
+	local fontOffset = ns.GetFontSizeOffset and ns.GetFontSizeOffset() or 0
+
 	if button.Cooldown then
 		button.Cooldown:SetReverse(true)
 		if auraDurationFormatter and button.Time then
@@ -373,7 +401,11 @@ local function StyleAuraButton(element, button, options)
 			for i = 1, button.Cooldown:GetNumRegions() do
 				local region = select(i, button.Cooldown:GetRegions())
 				if region and region.IsObjectType and region:IsObjectType("FontString") then
-					region:SetFont(FONT, timerSize, "OUTLINE")
+					local sz = math.max(7, timerSize + fontOffset)
+					if not region:SetFont(FONT, sz, fontFlags) then
+						region:SetFont("Interface\\Addons\\oUF_Brun\\textures\\Font.ttf", sz, fontFlags)
+					end
+					if ns.TrackFontString then ns.TrackFontString(region, timerSize) end
 				end
 			end
 		end
@@ -382,7 +414,11 @@ local function StyleAuraButton(element, button, options)
 	if button.Time then
 		button.Time:SetShadowOffset(1.5, -1.5)
 		button.Time:SetShadowColor(0, 0, 0, 1)
-		button.Time:SetFont(FONT, timerSize, "OUTLINE")
+		local sz = math.max(7, timerSize + fontOffset)
+		if not button.Time:SetFont(FONT, sz, fontFlags) then
+			button.Time:SetFont("Interface\\Addons\\oUF_Brun\\textures\\Font.ttf", sz, fontFlags)
+		end
+		if ns.TrackFontString then ns.TrackFontString(button.Time, timerSize) end
 		button.Time:ClearAllPoints()
 		button.Time:SetPoint("CENTER", button, "CENTER", 0, 0)
 		button.Time:SetTextColor(1, 1, 1)
@@ -394,7 +430,11 @@ local function StyleAuraButton(element, button, options)
 	if button.Count then
 		button.Count:SetShadowOffset(1, -1)
 		button.Count:SetShadowColor(0, 0, 0, 1)
-		button.Count:SetFont(FONT, countSize, "OUTLINE")
+		local sz = math.max(7, countSize + fontOffset)
+		if not button.Count:SetFont(FONT, sz, fontFlags) then
+			button.Count:SetFont("Interface\\Addons\\oUF_Brun\\textures\\Font.ttf", sz, fontFlags)
+		end
+		if ns.TrackFontString then ns.TrackFontString(button.Count, countSize) end
 		button.Count:ClearAllPoints()
 		button.Count:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 1, -1)
 		if button.Count.SetDrawLayer then
@@ -621,6 +661,7 @@ local function CreateCastbar(self, anchor, yOffset, isPlayer)
 	ApplyBackdrop(cb)
 	cb:SetToplevel(true)
 	cb:SetStatusBarTexture(TEXTURE)
+	if ns.TrackStatusBar then ns.TrackStatusBar(cb) end
 	cb:SetStatusBarColor(castNormalColor:GetRGB())
 	cb:SetHeight(14)
 	cb.smoothing = smoothInterpolation
@@ -637,11 +678,13 @@ local function CreateCastbar(self, anchor, yOffset, isPlayer)
 	if isPlayer then
 		local safezone = cb:CreateTexture(nil, "BORDER")
 		safezone:SetTexture(TEXTURE)
+		if ns.TrackBarTexture then ns.TrackBarTexture(safezone) end
 		safezone:SetVertexColor(0.85, 0.15, 0.15, 0.65)
 		cb.SafeZone = safezone
 
 		local latency = cb:CreateFontString(nil, "OVERLAY")
 		latency:SetFont(FONT, math.max(8, SMALL_FONT_SIZE - 3), "OUTLINE")
+		if ns.TrackFontString then ns.TrackFontString(latency, math.max(8, SMALL_FONT_SIZE - 3)) end
 		latency:SetPoint("BOTTOMRIGHT", safezone, "BOTTOMRIGHT", -1, 0)
 		latency:SetTextColor(0.8, 0.8, 0.8, 0.85)
 		cb.Latency = latency
@@ -653,6 +696,7 @@ local function CreateCastbar(self, anchor, yOffset, isPlayer)
 	cbtime:SetJustifyH("RIGHT")
 	cbtime:SetShadowOffset(1, -1)
 	cbtime:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+	if ns.TrackFontString then ns.TrackFontString(cbtime, SMALL_FONT_SIZE) end
 	if C_DurationUtil and C_DurationUtil.CreateDurationTextBinding and castTimeFormatter and Enum.DurationTextBindingProperty then
 		cbtime.binding = C_DurationUtil.CreateDurationTextBinding()
 		cbtime.binding:SetTextFormat("{} / {}", {
@@ -668,6 +712,7 @@ local function CreateCastbar(self, anchor, yOffset, isPlayer)
 	cbdelay:SetJustifyH("RIGHT")
 	cbdelay:SetShadowOffset(1, -1)
 	cbdelay:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+	if ns.TrackFontString then ns.TrackFontString(cbdelay, SMALL_FONT_SIZE) end
 	cb.Delay = cbdelay
 
 	local cbtext = cb:CreateFontString(nil, "OVERLAY")
@@ -678,6 +723,7 @@ local function CreateCastbar(self, anchor, yOffset, isPlayer)
 	cbtext:SetShadowOffset(1, -1)
 	cbtext:SetJustifyH("LEFT")
 	cbtext:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+	if ns.TrackFontString then ns.TrackFontString(cbtext, SMALL_FONT_SIZE) end
 	cb.Text = cbtext
 
 	local cbicon = cb:CreateTexture(nil, "OVERLAY")
@@ -700,6 +746,7 @@ local function CreatePredictionBar(hp, anchorTexture, r, g, b, a, reverse)
 	bar:SetPoint("BOTTOM")
 	bar:SetPoint(reverse and "RIGHT" or "LEFT", anchorTexture, "RIGHT")
 	bar:SetStatusBarTexture(TEXTURE)
+	if ns.TrackStatusBar then ns.TrackStatusBar(bar) end
 	bar:SetStatusBarColor(r, g, b, a)
 	if reverse then
 		bar:SetReverseFill(true)
@@ -748,6 +795,7 @@ local function CreateHealthPrediction(self)
 		tempLoss:SetAllPoints(hp)
 		tempLoss:SetReverseFill(true)
 		tempLoss:SetStatusBarTexture(TEXTURE)
+		if ns.TrackStatusBar then ns.TrackStatusBar(tempLoss) end
 		tempLoss:SetStatusBarColor(0.6, 0.15, 0.15, 0.75)
 		hp.TempLoss = tempLoss
 	end
@@ -760,6 +808,7 @@ local function CreateCostPrediction(bar, barWidth)
 	cost:SetPoint("BOTTOM")
 	cost:SetPoint("RIGHT", bar:GetStatusBarTexture(), "RIGHT")
 	cost:SetStatusBarTexture(TEXTURE)
+	if ns.TrackStatusBar then ns.TrackStatusBar(cost) end
 	cost:SetStatusBarColor(1, 1, 1, 0.45)
 	cost:SetWidth(barWidth)
 	bar.CostPrediction = cost
@@ -885,6 +934,7 @@ local function EnsureThreatBadge(frame)
 
 	local txt = badge:CreateFontString(nil, "OVERLAY")
 	txt:SetFont(FONT, 9, "OUTLINE")
+	if ns.TrackFontString then ns.TrackFontString(txt, 9) end
 	txt:SetPoint("CENTER", 0, 0)
 	if compact then
 		badge:SetSize(10, 10)
@@ -1644,6 +1694,11 @@ local function ApplySavedOptions()
 	end
 	ApplyHealthColors()
 	ApplyThreatSettings()
+	TEXTURE = ns.GetStatusBarTexture and ns.GetStatusBarTexture() or TEXTURE
+	FONT = ns.GetFontPath and ns.GetFontPath() or FONT
+	if ns.ApplyMedia then
+		ns.ApplyMedia()
+	end
 end
 
 local function FinishMoverDrag(mover)
@@ -1720,6 +1775,7 @@ local function CreatePositionAnchor(key, w, h, defaultPoint)
 
 	local label = mover:CreateFontString(nil, "OVERLAY")
 	label:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+	if ns.TrackFontString then ns.TrackFontString(label, SMALL_FONT_SIZE) end
 	label:SetPoint("CENTER")
 	label:SetText(key)
 
@@ -1860,6 +1916,7 @@ local function CreateTotemBar(self)
 
 		local text = totem:CreateFontString(nil, "OVERLAY")
 		text:SetFont(FONT, 10, "OUTLINE")
+		if ns.TrackFontString then ns.TrackFontString(text, 10) end
 		text:SetPoint("TOP", totem, "TOP", 0, 2)
 		text:SetTextColor(1, 1, 1)
 		if C_DurationUtil and C_DurationUtil.CreateDurationTextBinding and auraDurationFormatter then
@@ -1976,6 +2033,7 @@ local function CreateSwingBars(self)
 			bar:SetPoint("TOPLEFT", swingAnchor, "TOPLEFT", 0, spec.yOffset)
 			ApplyBackdrop(bar)
 			bar:SetStatusBarTexture(TEXTURE)
+			if ns.TrackStatusBar then ns.TrackStatusBar(bar) end
 			bar:SetStatusBarColor(spec.color[1], spec.color[2], spec.color[3])
 			bar.smoothing = smoothInterpolation
 			if direction then
@@ -1987,10 +2045,12 @@ local function CreateSwingBars(self)
 			local bg = bar:CreateTexture(nil, "BORDER")
 			bg:SetAllPoints()
 			bg:SetTexture(TEXTURE)
+			if ns.TrackBarTexture then ns.TrackBarTexture(bg) end
 			bg:SetVertexColor(spec.color[1] * 0.25, spec.color[2] * 0.25, spec.color[3] * 0.25, 0.4)
 
 			local label = bar:CreateFontString(nil, "OVERLAY")
 			label:SetFont(FONT, fontSize, "OUTLINE")
+			if ns.TrackFontString then ns.TrackFontString(label, fontSize) end
 			label:SetPoint("LEFT", 4, 0)
 			label:SetTextColor(1, 1, 1, 0.85)
 			label:SetShadowOffset(1, -1)
@@ -1998,6 +2058,7 @@ local function CreateSwingBars(self)
 
 			local timeText = bar:CreateFontString(nil, "OVERLAY")
 			timeText:SetFont(FONT, fontSize, "OUTLINE")
+			if ns.TrackFontString then ns.TrackFontString(timeText, fontSize) end
 			timeText:SetPoint("RIGHT", -4, 0)
 			timeText:SetTextColor(1, 1, 1)
 			timeText:SetShadowOffset(1, -1)
@@ -2060,6 +2121,7 @@ local UnitSpecific = {
 		local altPower = CreateFrame("StatusBar", nil, self)
 		altPower:SetPoint("BOTTOMLEFT", hp, "TOPLEFT", 0, 28)
 		altPower:SetStatusBarTexture(TEXTURE)
+		if ns.TrackStatusBar then ns.TrackStatusBar(altPower) end
 		altPower:SetSize(width, 9)
 		ApplyBackdrop(altPower)
 		altPower:EnableMouse(true)
@@ -2069,12 +2131,14 @@ local UnitSpecific = {
 		local altBg = altPower:CreateTexture(nil, "BORDER")
 		altBg:SetAllPoints()
 		altBg:SetTexture(TEXTURE)
+		if ns.TrackBarTexture then ns.TrackBarTexture(altBg) end
 		altBg:SetAlpha(0.3)
 		altPower.bg = altBg
 		altPower.PostUpdateColor = PostUpdateBarColor
 
 		local altText = altPower:CreateFontString(nil, "OVERLAY")
 		altText:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+		if ns.TrackFontString then ns.TrackFontString(altText, SMALL_FONT_SIZE) end
 		altText:SetPoint("CENTER")
 		altText:SetTextColor(1, 1, 1)
 		altPower.Text = altText
@@ -2127,6 +2191,7 @@ local UnitSpecific = {
 			for i = 1, 6 do
 				local bar = CreateFrame("StatusBar", nil, runes)
 				bar:SetStatusBarTexture(TEXTURE)
+				if ns.TrackStatusBar then ns.TrackStatusBar(bar) end
 				bar:SetSize(runeWidth, 7)
 				if i == 1 then
 					bar:SetPoint("TOPLEFT")
@@ -2145,6 +2210,7 @@ local UnitSpecific = {
 			local addPower = CreateFrame("StatusBar", nil, self)
 			addPower:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -3)
 			addPower:SetStatusBarTexture(TEXTURE)
+			if ns.TrackStatusBar then ns.TrackStatusBar(addPower) end
 			addPower:SetSize(width, 7)
 			ApplyBackdrop(addPower)
 			addPower:SetAlpha(0.85)
@@ -2156,6 +2222,7 @@ local UnitSpecific = {
 			local addBg = addPower:CreateTexture(nil, "BORDER")
 			addBg:SetAllPoints()
 			addBg:SetTexture(TEXTURE)
+			if ns.TrackBarTexture then ns.TrackBarTexture(addBg) end
 			addBg:SetAlpha(0.3)
 			addPower.bg = addBg
 			addPower.PostUpdateColor = PostUpdateBarColor
@@ -2171,6 +2238,7 @@ local UnitSpecific = {
 
 			local addText = addPower:CreateFontString(nil, "OVERLAY")
 			addText:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+			if ns.TrackFontString then ns.TrackFontString(addText, SMALL_FONT_SIZE) end
 			addText:SetPoint("CENTER")
 			addText:SetTextColor(1, 1, 1)
 			addPower.Text = addText
@@ -2200,6 +2268,7 @@ local UnitSpecific = {
 			local stagger = CreateFrame("StatusBar", nil, self)
 			stagger:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -3)
 			stagger:SetStatusBarTexture(TEXTURE)
+			if ns.TrackStatusBar then ns.TrackStatusBar(stagger) end
 			stagger:SetSize(width, 7)
 			ApplyBackdrop(stagger)
 			stagger.smoothing = smoothInterpolation
@@ -2207,12 +2276,14 @@ local UnitSpecific = {
 			local staggerBg = stagger:CreateTexture(nil, "BORDER")
 			staggerBg:SetAllPoints()
 			staggerBg:SetTexture(TEXTURE)
+			if ns.TrackBarTexture then ns.TrackBarTexture(staggerBg) end
 			staggerBg:SetAlpha(0.3)
 			stagger.bg = staggerBg
 			stagger.PostUpdateColor = PostUpdateBarColor
 
 			local staggerText = stagger:CreateFontString(nil, "OVERLAY")
 			staggerText:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
+			if ns.TrackFontString then ns.TrackFontString(staggerText, SMALL_FONT_SIZE) end
 			staggerText:SetPoint("CENTER")
 			staggerText:SetTextColor(1, 1, 1)
 			stagger.Text = staggerText
@@ -2255,6 +2326,7 @@ local UnitSpecific = {
 			for i = 1, 10 do
 				local bar = CreateFrame("StatusBar", nil, classPowerBar)
 				bar:SetStatusBarTexture(TEXTURE)
+				if ns.TrackStatusBar then ns.TrackStatusBar(bar) end
 				bar:SetHeight(7)
 				if i == 1 then
 					bar:SetPoint("TOPLEFT", classPowerBar, "TOPLEFT", 0, 0)
@@ -2265,12 +2337,14 @@ local UnitSpecific = {
 				local bg = bar:CreateTexture(nil, "BORDER")
 				bg:SetAllPoints()
 				bg:SetTexture(TEXTURE)
+				if ns.TrackBarTexture then ns.TrackBarTexture(bg) end
 				bg:SetAlpha(0.28)
 				bar.bg = bg
 
 				local charge = bar:CreateTexture(nil, "OVERLAY")
 				charge:SetAllPoints()
 				charge:SetTexture(TEXTURE)
+				if ns.TrackBarTexture then ns.TrackBarTexture(charge) end
 				charge:SetBlendMode("ADD")
 				charge:SetVertexColor(0.35, 0.85, 1, 0.45)
 				charge:Hide()
@@ -2440,6 +2514,7 @@ local UnitSpecific = {
 				for i = 1, 10 do
 					local bar = CreateFrame("StatusBar", nil, comboBar)
 					bar:SetStatusBarTexture(TEXTURE)
+					if ns.TrackStatusBar then ns.TrackStatusBar(bar) end
 					bar:SetHeight(7)
 					bar:SetMinMaxValues(0, 1)
 					bar:SetValue(0)
@@ -2453,6 +2528,7 @@ local UnitSpecific = {
 					local bg = bar:CreateTexture(nil, "BORDER")
 					bg:SetAllPoints()
 					bg:SetTexture(TEXTURE)
+					if ns.TrackBarTexture then ns.TrackBarTexture(bg) end
 					bg:SetAlpha(0.28)
 					bg:SetVertexColor(r, g, b)
 					bar.bg = bg
@@ -2460,6 +2536,7 @@ local UnitSpecific = {
 					local charge = bar:CreateTexture(nil, "OVERLAY")
 					charge:SetAllPoints()
 					charge:SetTexture(TEXTURE)
+					if ns.TrackBarTexture then ns.TrackBarTexture(charge) end
 					charge:SetBlendMode("ADD")
 					charge:SetVertexColor(0.35, 0.85, 1, 0.45)
 					charge:Hide()
@@ -2505,6 +2582,7 @@ local UnitSpecific = {
 		threatBar:SetPoint("BOTTOMLEFT", hp, "TOPLEFT", 0, 4)
 		ApplyBackdrop(threatBar)
 		threatBar:SetStatusBarTexture(TEXTURE)
+		if ns.TrackStatusBar then ns.TrackStatusBar(threatBar) end
 		threatBar:SetMinMaxValues(0, 100)
 		threatBar:SetValue(0)
 		threatBar:SetFrameLevel(hp:GetFrameLevel() + 4)
@@ -2513,11 +2591,13 @@ local UnitSpecific = {
 		local threatBg = threatBar:CreateTexture(nil, "BORDER")
 		threatBg:SetAllPoints()
 		threatBg:SetTexture(TEXTURE)
+		if ns.TrackBarTexture then ns.TrackBarTexture(threatBg) end
 		threatBg:SetAlpha(0.28)
 		threatBar.bg = threatBg
 
 		local threatText = threatBar:CreateFontString(nil, "OVERLAY")
 		threatText:SetFont(FONT, math.max(9, SMALL_FONT_SIZE - 2), "OUTLINE")
+		if ns.TrackFontString then ns.TrackFontString(threatText, math.max(9, SMALL_FONT_SIZE - 2)) end
 		threatText:SetPoint("CENTER", 0, 0)
 		threatText:SetTextColor(1, 1, 1)
 		threatBar.text = threatText
@@ -2644,8 +2724,10 @@ local function Shared(self, unit, isSingle)
 	hp:SetPoint("TOPRIGHT")
 	hp:SetPoint("TOPLEFT")
 	hp:SetStatusBarTexture(TEXTURE)
+	if ns.TrackStatusBar then ns.TrackStatusBar(hp) end
 	hp:SetHeight(hpHeight)
-	hp:SetAlpha(0.8)
+	hp:SetAlpha(ns.GetBarAlpha and ns.GetBarAlpha() or 0.8)
+	if ns.TrackHealthBar then ns.TrackHealthBar(hp) end
 	hp.colorDisconnected = true
 	hp.colorTapping = true
 	hp.colorClass = (healthColorMode ~= "blizzard") or (healthColorPlayerOnly and unit ~= "player")
@@ -2671,11 +2753,13 @@ local function Shared(self, unit, isSingle)
 	local hpbg = hp:CreateTexture(nil, "BORDER")
 	hpbg:SetAllPoints(self)
 	hpbg:SetTexture(TEXTURE)
+	if ns.TrackBarTexture then ns.TrackBarTexture(hpbg) end
 	hpbg:SetAlpha(0.3)
 	hp.bg = hpbg
 
 	local hpp = hp:CreateFontString(nil, "OVERLAY")
 	hpp:SetFont(FONT, fontSize, "OUTLINE")
+	if ns.TrackFontString then ns.TrackFontString(hpp, fontSize) end
 	hpp:SetPoint("RIGHT", -1, 0)
 	hpp:SetTextColor(1, 1, 1)
 	hp.value = hpp
@@ -2689,6 +2773,7 @@ local function Shared(self, unit, isSingle)
 		pp:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, 0)
 		pp:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", 0, 0)
 		pp:SetStatusBarTexture(TEXTURE)
+		if ns.TrackStatusBar then ns.TrackStatusBar(pp) end
 		pp.frequentUpdates = true
 		pp.colorDisconnected = true
 		pp.colorTapping = true
@@ -2700,12 +2785,14 @@ local function Shared(self, unit, isSingle)
 		local ppbg = pp:CreateTexture(nil, "BORDER")
 		ppbg:SetAllPoints()
 		ppbg:SetTexture(TEXTURE)
+		if ns.TrackBarTexture then ns.TrackBarTexture(ppbg) end
 		ppbg:SetAlpha(0.3)
 		pp.bg = ppbg
 
 		if unit ~= "pet" then
 			local ppp = pp:CreateFontString(nil, "OVERLAY")
 			ppp:SetFont(FONT, fontSize, "OUTLINE")
+			if ns.TrackFontString then ns.TrackFontString(ppp, fontSize) end
 			ppp:SetPoint("RIGHT", -1, 0)
 			ppp:SetTextColor(1, 1, 1)
 			pp.value = ppp
@@ -2718,6 +2805,7 @@ local function Shared(self, unit, isSingle)
 				info:SetWordWrap(false)
 				info:SetJustifyH("LEFT")
 				info:SetFont(FONT, fontSize, "OUTLINE")
+				if ns.TrackFontString then ns.TrackFontString(info, fontSize) end
 				info:SetTextColor(1, 1, 1)
 				self.Info = info
 				self:Tag(info, "L[difficulty][level]|cffffffff[shortclassification] [smarterrace]|r")
@@ -2792,6 +2880,7 @@ local function Shared(self, unit, isSingle)
 	name:SetWordWrap(false)
 	name:SetJustifyH("LEFT")
 	name:SetFont(FONT, fontSize, "OUTLINE")
+	if ns.TrackFontString then ns.TrackFontString(name, fontSize) end
 	self.Name = name
 	local nameTag = "[NormalName] [afkdnd]"
 	if isPartySubUnit then
@@ -2826,8 +2915,10 @@ ns.raidHeight = raidHeight
 ns.defaultRaidPoint = oUF_Brun.Raid
 ns.smoothInterpolation = smoothInterpolation
 ns.ApplyBackdrop = ApplyBackdrop
+ns.ApplyBackdropBorderSize = ApplyBackdropBorderSize
 ns.PostUpdateBarColor = PostUpdateBarColor
 ns.PostUpdateThreat = PostUpdateThreat
+ns.ApplyThreatSettings = ApplyThreatSettings
 ns.UnitFrameOnEnter = UnitFrameOnEnter
 ns.UnitFrameOnLeave = UnitFrameOnLeave
 ns.CreateHealthPrediction = CreateHealthPrediction
