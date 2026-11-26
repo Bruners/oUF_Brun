@@ -46,6 +46,7 @@ local showTargetTargetTarget = true		-- Spawn Target of Target's Target (ToToT) 
 local enableTotemBar = true				-- Style and anchor clickable TotemFrame icons above Player/Pet.
 local enableSwingBar = true				-- Show player melee/ranged swing timer bars.
 local enableClassPower = true			-- Show player ClassPower (Combo Points, Holy Power, etc.) & Monk Stagger bars.
+local useComboDots = false				-- Use classic combo point dots instead of segmented bar on Target.
 local hideCompactRaidManager = true		-- Auto-fade the collapsed Blizzard Raid Manager tab until mouseover.
 local highlightExpiringAuras = true		-- Highlight aura timer numbers in yellow/red when expiring (<=10s / <=5s).
 local highlightDispellableDebuffs = true	-- Highlight and prioritize debuffs the player's class can dispel.
@@ -226,27 +227,80 @@ local function PostUpdateBarColor(element, unitOrColor, color, altR, altG, altB)
 end
 
 local function UpdateTargetComboPoints(self, event, _, powerType)
-	if (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT") and powerType ~= "COMBO_POINTS" then
+	if (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT" or event == "UNIT_MAXPOWER") and powerType ~= "COMBO_POINTS" then
 		return
 	end
 
+	local unit = (UnitHasVehicleUI and UnitHasVehicleUI("player")) and "vehicle" or "player"
 	local cp = 0
 	if UnitExists("target") then
-		local unit = (UnitHasVehicleUI and UnitHasVehicleUI("player")) and "vehicle" or "player"
 		if GetComboPoints then
 			cp = GetComboPoints(unit, "target") or 0
 		else
-			cp = UnitPower(unit, Enum.PowerType.ComboPoints) or 0
+			cp = (Enum.PowerType and Enum.PowerType.ComboPoints and UnitPower(unit, Enum.PowerType.ComboPoints)) or 0
 		end
 	end
-
 	if issecretvalue(cp) then
 		cp = 0
 	end
 
 	local cpoints = self.CPoints
-	for i = 1, 5 do
-		cpoints[i]:SetShown(i <= cp)
+	if cpoints then
+		for i = 1, 5 do
+			cpoints[i]:SetShown(i <= cp)
+		end
+		return
+	end
+
+	local comboBar = self.ComboPowerBar
+	if not comboBar then return end
+
+	local maxCP = Enum.PowerType and Enum.PowerType.ComboPoints and UnitPowerMax(unit, Enum.PowerType.ComboPoints)
+	if not maxCP or issecretvalue(maxCP) or maxCP <= 0 then
+		maxCP = 5
+	end
+	maxCP = math.min(maxCP, 10)
+
+	local powerTypeId = Enum.PowerType and Enum.PowerType.Energy
+	local isCatOrRogue = (playerClass == "ROGUE") or (powerTypeId and UnitPowerType(unit) == powerTypeId) or (cp > 0)
+	local shouldShow = UnitExists("target") and maxCP > 0 and (cp > 0 or UnitCanAttack("player", "target")) and isCatOrRogue
+
+	comboBar:SetShown(shouldShow)
+
+	if shouldShow then
+		local bars = comboBar.bars
+		local cpGap = 2
+		if comboBar._sizedMax ~= maxCP then
+			comboBar._sizedMax = maxCP
+			local barWidth = (width - (maxCP - 1) * cpGap) / maxCP
+			for i = 1, 10 do
+				bars[i]:SetWidth(barWidth)
+			end
+		end
+
+		for i = 1, 10 do
+			local bar = bars[i]
+			bar:SetShown(i <= maxCP)
+			bar:SetValue(i <= cp and 1 or 0)
+			if bar.ChargeOverlay then
+				bar.ChargeOverlay:Hide()
+			end
+		end
+
+		if GetUnitChargedPowerPoints then
+			local charged = GetUnitChargedPowerPoints(unit)
+			if type(charged) == "table" then
+				for _, chargedIndex in ipairs(charged) do
+					if chargedIndex and not issecretvalue(chargedIndex) and bars[chargedIndex] and bars[chargedIndex].ChargeOverlay then
+						bars[chargedIndex].ChargeOverlay:Show()
+					end
+				end
+			end
+		end
+	end
+
+	if self.UpdateTargetBottomOffsets then
+		self.UpdateTargetBottomOffsets()
 	end
 end
 
@@ -1210,6 +1264,7 @@ local function ApplySavedOptions()
 	enableTotemBar = opts.enableTotemBar
 	enableSwingBar = (opts.enableSwingBar ~= false)
 	enableClassPower = (opts.enableClassPower ~= false)
+	useComboDots = (opts.useComboDots == true)
 	hideCompactRaidManager = opts.hideCompactRaidManager
 	oUFRuneBar = opts.oUFRuneBar
 	removeBuffs = opts.removeBuffs
@@ -1977,34 +2032,114 @@ local UnitSpecific = {
 
 	target = function(self)
 		local hp, pp = self.Health, self.Power
-		if playerClass == "ROGUE" or playerClass == "DRUID" then
-			self.CPoints = {}
-			for i = 1, 5 do
-				local dot = pp:CreateTexture(nil, "OVERLAY")
-				dot:SetTexture(COMBO)
-				dot:Hide()
-				if i == 1 then
-					dot:SetSize(10, 10)
-					dot:SetPoint("CENTER", pp, "CENTER", 30, -1)
-					dot:SetVertexColor(1, 84 / 255, 0)
-				else
-					local sz = 10 + (i * 0.5)
-					dot:SetSize(sz, sz)
-					dot:SetPoint("RIGHT", self.CPoints[i - 1], "LEFT", -2, 0)
-				end
-				self.CPoints[i] = dot
-			end
-			self.CPoints[2]:SetVertexColor(1, 162 / 255, 0)
-			self.CPoints[3]:SetVertexColor(1, 246 / 255, 0)
-			self.CPoints[4]:SetVertexColor(204 / 255, 1, 0)
-			self.CPoints[5]:SetVertexColor(76 / 255, 236 / 255, 0)
 
-			local cpWatcher = CreateFrame("Frame", nil, self)
-			cpWatcher.CPoints = self.CPoints
-			cpWatcher:RegisterUnitEvent("UNIT_POWER_UPDATE", "player", "vehicle")
-			cpWatcher:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player", "vehicle")
-			cpWatcher:RegisterEvent("PLAYER_TARGET_CHANGED")
-			cpWatcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+		local function UpdateTargetBottomOffsets()
+			local gap = (self.ComboPowerBar and self.ComboPowerBar:IsShown()) and 11 or 0
+			if self.Castbar then
+				self.Castbar:ClearAllPoints()
+				self.Castbar:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -2 - gap)
+				self.Castbar:SetPoint("TOPRIGHT", pp, "BOTTOMRIGHT", 0, -2 - gap)
+			end
+			if self.TargetDebuffs then
+				self.TargetDebuffs:ClearAllPoints()
+				self.TargetDebuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -EXPREPBARGAP - gap)
+			end
+		end
+
+		local cpWatcher
+		if enableClassPower and (playerClass == "ROGUE" or playerClass == "DRUID") then
+			cpWatcher = CreateFrame("Frame", nil, self)
+			if useComboDots then
+				self.CPoints = {}
+				for i = 1, 5 do
+					local dot = pp:CreateTexture(nil, "OVERLAY")
+					dot:SetTexture(COMBO)
+					dot:Hide()
+					if i == 1 then
+						dot:SetSize(10, 10)
+						dot:SetPoint("CENTER", pp, "CENTER", 30, -1)
+						dot:SetVertexColor(1, 84 / 255, 0)
+					else
+						local sz = 10 + (i * 0.5)
+						dot:SetSize(sz, sz)
+						dot:SetPoint("RIGHT", self.CPoints[i - 1], "LEFT", -2, 0)
+					end
+					self.CPoints[i] = dot
+				end
+				self.CPoints[2]:SetVertexColor(1, 162 / 255, 0)
+				self.CPoints[3]:SetVertexColor(1, 246 / 255, 0)
+				self.CPoints[4]:SetVertexColor(204 / 255, 1, 0)
+				self.CPoints[5]:SetVertexColor(76 / 255, 236 / 255, 0)
+
+				cpWatcher.CPoints = self.CPoints
+				cpWatcher:RegisterUnitEvent("UNIT_POWER_UPDATE", "player", "vehicle")
+				cpWatcher:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player", "vehicle")
+				cpWatcher:RegisterEvent("PLAYER_TARGET_CHANGED")
+				cpWatcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+			else
+				local comboBar = CreateFrame("Frame", nil, self)
+				comboBar:SetPoint("TOPLEFT", pp, "BOTTOMLEFT", 0, -3)
+				comboBar:SetSize(width, 7)
+				ApplyBackdrop(comboBar)
+				comboBar:Hide()
+				self.ComboPowerBar = comboBar
+
+				local cpColor = oUF.colors.power and oUF.colors.power.COMBO_POINTS
+				local r, g, b = 1, 0.96, 0.41
+				if cpColor then
+					if cpColor.GetRGB then
+						r, g, b = cpColor:GetRGB()
+					elseif cpColor[1] then
+						r, g, b = cpColor[1], cpColor[2], cpColor[3]
+					end
+				end
+
+				local cpGap = 2
+				local bars = {}
+				for i = 1, 10 do
+					local bar = CreateFrame("StatusBar", nil, comboBar)
+					bar:SetStatusBarTexture(TEXTURE)
+					bar:SetHeight(7)
+					bar:SetMinMaxValues(0, 1)
+					bar:SetValue(0)
+					bar:SetStatusBarColor(r, g, b)
+					if i == 1 then
+						bar:SetPoint("TOPLEFT", comboBar, "TOPLEFT", 0, 0)
+					else
+						bar:SetPoint("LEFT", bars[i - 1], "RIGHT", cpGap, 0)
+					end
+
+					local bg = bar:CreateTexture(nil, "BORDER")
+					bg:SetAllPoints()
+					bg:SetTexture(TEXTURE)
+					bg:SetAlpha(0.28)
+					bg:SetVertexColor(r, g, b)
+					bar.bg = bg
+
+					local charge = bar:CreateTexture(nil, "OVERLAY")
+					charge:SetAllPoints()
+					charge:SetTexture(TEXTURE)
+					charge:SetBlendMode("ADD")
+					charge:SetVertexColor(0.35, 0.85, 1, 0.45)
+					charge:Hide()
+					bar.ChargeOverlay = charge
+
+					bar:Hide()
+					bars[i] = bar
+				end
+				comboBar.bars = bars
+
+				cpWatcher.ComboPowerBar = comboBar
+				cpWatcher.UpdateTargetBottomOffsets = UpdateTargetBottomOffsets
+				cpWatcher:RegisterUnitEvent("UNIT_POWER_UPDATE", "player", "vehicle")
+				cpWatcher:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player", "vehicle")
+				cpWatcher:RegisterUnitEvent("UNIT_MAXPOWER", "player", "vehicle")
+				cpWatcher:RegisterUnitEvent("UNIT_DISPLAYPOWER", "player", "vehicle")
+				pcall(cpWatcher.RegisterUnitEvent, cpWatcher, "UNIT_POWER_POINT_CHARGE", "player", "vehicle")
+				cpWatcher:RegisterEvent("PLAYER_TARGET_CHANGED")
+				cpWatcher:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+				cpWatcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+			end
 			cpWatcher:SetScript("OnEvent", UpdateTargetComboPoints)
 		end
 
@@ -2018,9 +2153,15 @@ local UnitSpecific = {
 		if targetShowDebuffs then
 			local debuffs = CreateAuraWidget(self, "TARGET_DEBUFFS", width, targetDebuffSize, targetDebuffSpacing, "RIGHT", "DOWN")
 			debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -EXPREPBARGAP)
+			self.TargetDebuffs = debuffs
 		end
 		if showPortraits then
 			CreatePortrait(self, "RIGHT")
+		end
+		if cpWatcher then
+			UpdateTargetComboPoints(cpWatcher, "PLAYER_ENTERING_WORLD")
+		else
+			UpdateTargetBottomOffsets()
 		end
 	end,
 

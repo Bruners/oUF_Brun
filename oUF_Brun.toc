@@ -9,6 +9,6 @@
 ## Notes: oUF 14.3+ layout for WoW Forever and Retail
 
 oUF_BrunTags.lua
+oUF_BrunOptions.lua
 oUF_Brun.lua
 oUF_BrunRaid.lua
-oUF_BrunOptions.lua

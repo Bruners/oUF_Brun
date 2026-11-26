@@ -7,11 +7,6 @@ local addonName, ns = ...
 local oUF = ns.oUF or _G.oUF
 assert(oUF, "oUF_Brun requires oUF to be loaded.")
 
-local FONT = ns.FONT
-local TEXTURE = ns.TEXTURE
-local FONT_SIZE = ns.FONT_SIZE or 14
-local SMALL_FONT_SIZE = ns.SMALL_FONT_SIZE or 12
-
 --===================================================--
 -- Default Options & SavedVariables Accessors
 --===================================================--
@@ -51,6 +46,7 @@ local DEFAULT_OPTIONS = {
 	highlightDispellableDebuffs = true,
 	enableSwingBar = true,
 	enableClassPower = true,
+	useComboDots = false,
 	showMinimapIcon = true,
 }
 
@@ -129,6 +125,11 @@ function ns.ToggleConfigGUI()
 		configFrame:SetShown(not configFrame:IsShown())
 		return
 	end
+
+	local FONT = ns.FONT
+	local TEXTURE = ns.TEXTURE
+	local FONT_SIZE = ns.FONT_SIZE or 14
+	local SMALL_FONT_SIZE = ns.SMALL_FONT_SIZE or 12
 
 	local f = CreateFrame("Frame", "oUF_BrunConfigFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
 	f:SetSize(580, 444)
@@ -672,9 +673,17 @@ function ns.ToggleConfigGUI()
 			CreateToggleRow(card1, def, i)
 		end
 
-		local card2 = CreateCard(p, "Class & Combat Bars", 134, 182)
+		local card2 = CreateCard(p, "Class & Combat Bars", 158, 182)
 		local classBars = {
-			{ key = "enableClassPower", label = "Player Class Power & Monk Stagger Bar", tip = "Show Holy Power, Chi, Soul Shards, Arcane Charges, Essence, or Stagger." },
+			{ key = "enableClassPower", label = "Class Power, Combo Points & Stagger", tip = "Show Combo Points, Holy Power, Chi, Soul Shards, Arcane Charges, Essence, or Stagger." },
+			{
+				key = "useComboDots",
+				label = "Use Combo Point Dots (instead of Bar)",
+				tip = "Show classic combo point dots on Target's power bar instead of the segmented bar.",
+				indent = true,
+				dependsOn = "enableClassPower",
+				dependsLabel = "Class Power, Combo Points & Stagger",
+			},
 			{ key = "enableSwingBar", label = "Player Swing Timer Bar", tip = "Display melee and ranged auto-attack swing timer bars." },
 			{ key = "enableTotemBar", label = "Clickable Totem Bar above Player", tip = "Style and anchor Shaman/class totems above your Player frame." },
 			{ key = "oUFRuneBar", label = "Use oUF Death Knight Rune Bar", tip = "Replace Blizzard's default Death Knight Rune Frame with oUF runes." },
@@ -849,6 +858,8 @@ end
 
 function ns.CreateMinimapButton()
 	if minimapButton or not Minimap then return end
+
+	local FONT = ns.FONT
 
 	local btn = CreateFrame("Button", "oUF_BrunMinimapButton", Minimap)
 	btn:SetSize(31, 31)
