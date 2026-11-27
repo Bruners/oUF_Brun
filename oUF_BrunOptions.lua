@@ -42,6 +42,7 @@ local DEFAULT_OPTIONS = {
 	playerCastBar = true,
 	targetCastBar = true,
 	focusCastBar = true,
+	partyCastBar = false,
 	petCastBar = true,
 	playerShowBuffs = true,
 	playerShowDebuffs = true,
@@ -52,6 +53,7 @@ local DEFAULT_OPTIONS = {
 	partyShowBuffs = true,
 	partyShowDebuffs = true,
 	petShowAura = true,
+	petShowDebuffs = false,
 	auraSizeOffset = 0,
 	highlightExpiringAuras = true,
 	highlightDispellableDebuffs = true,
@@ -460,8 +462,8 @@ local TAB_OPTION_KEYS = {
 		"playerShowBuffs", "playerShowDebuffs", "playerCastBar",
 		"targetShowBuffs", "targetShowDebuffs", "targetCastBar",
 		"focusShowBuffs", "focusShowDebuffs", "focusCastBar",
-		"partyShowBuffs", "partyShowDebuffs",
-		"petShowAura", "petCastBar", "auraSizeOffset",
+		"partyShowBuffs", "partyShowDebuffs", "partyCastBar",
+		"petShowAura", "petShowDebuffs", "petCastBar", "auraSizeOffset",
 		"desaturateOtherDebuffs", "highlightDispellableDebuffs", "highlightExpiringAuras",
 	},
 	group = {
@@ -1949,20 +1951,12 @@ function ns.ToggleConfigGUI()
 			fs:SetText(ch.text)
 		end
 
-		local function AddMatrixDash(xPos, rowY)
-			local dash = card1:CreateFontString(nil, "OVERLAY")
-			dash:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
-			dash:SetPoint("TOP", card1, "TOPLEFT", xPos, -(rowY + 4))
-			dash:SetTextColor(0.4, 0.4, 0.45)
-			dash:SetText("-")
-		end
-
 		local matrixRows = {
 			{ unit = "Player", buffs = "playerShowBuffs", debuffs = "playerShowDebuffs", cast = "playerCastBar" },
 			{ unit = "Target", buffs = "targetShowBuffs", debuffs = "targetShowDebuffs", cast = "targetCastBar" },
 			{ unit = "Focus", buffs = "focusShowBuffs", debuffs = "focusShowDebuffs", cast = "focusCastBar" },
-			{ unit = "Party", buffs = "partyShowBuffs", debuffs = "partyShowDebuffs", cast = nil },
-			{ unit = "Pet", buffs = "petShowAura", debuffs = nil, cast = "petCastBar", buffsTip = "Show Pet Auras (Buffs & Debuffs)" },
+			{ unit = "Party", buffs = "partyShowBuffs", debuffs = "partyShowDebuffs", cast = "partyCastBar" },
+			{ unit = "Pet", buffs = "petShowAura", debuffs = "petShowDebuffs", cast = "petCastBar", buffsTip = "Show Pet Buffs" },
 		}
 		for idx, r in ipairs(matrixRows) do
 			local rowY = 52 + (idx - 1) * 26
@@ -1981,16 +1975,8 @@ function ns.ToggleConfigGUI()
 			unitLabel:SetText(r.unit)
 
 			CreateMatrixCell(card1, r.buffs, r.buffsTip or ("Show " .. r.unit .. " Buffs"), colBuffsX, rowY)
-			if r.debuffs then
-				CreateMatrixCell(card1, r.debuffs, "Show " .. r.unit .. " Debuffs", colDebuffsX, rowY)
-			else
-				AddMatrixDash(colDebuffsX, rowY)
-			end
-			if r.cast then
-				CreateMatrixCell(card1, r.cast, "Show " .. r.unit .. " Castbar", colCastX, rowY)
-			else
-				AddMatrixDash(colCastX, rowY)
-			end
+			CreateMatrixCell(card1, r.debuffs, "Show " .. r.unit .. " Debuffs", colDebuffsX, rowY)
+			CreateMatrixCell(card1, r.cast, "Show " .. r.unit .. " Castbar", colCastX, rowY)
 		end
 
 		local card2 = CreateCard(p, "Aura Filtering & Highlights", 138, 204)

@@ -775,6 +775,15 @@ ApplyTestDebuffs = function()
 			isTarget = true,
 		})
 	end
+	local petFrame = _G.oUF_Pet
+	if petFrame and petFrame.PetDebuffs then
+		local showPetDebuffs = (ns.GetOptionsDB().petShowDebuffs == true)
+		RenderTestDebuffIcons(petFrame.PetDebuffs, (petFrame:IsShown() and showPetDebuffs) and 2 or 0, {
+			size = math.max(12, petHeight),
+			spacing = 2,
+			growthX = "RIGHT",
+		})
+	end
 	if ApplyPartyDebuffPosition then
 		ApplyPartyDebuffPosition(pSize)
 	end
@@ -2228,7 +2237,7 @@ do
 			if pFrame and pFrame.PartyDebuffs then
 				pFrame.PartyDebuffs:ClearAllPoints()
 				if pos == "below" then
-					pFrame.PartyDebuffs:SetPoint("TOPLEFT", pFrame, "BOTTOMLEFT", 0, -4)
+					pFrame.PartyDebuffs:SetPoint("TOPLEFT", pFrame, "BOTTOMLEFT", 0, pFrame.Castbar and -18 or -4)
 				else
 					pFrame.PartyDebuffs:SetPoint("TOPLEFT", pFrame, "TOPRIGHT", 8, -yOff)
 				end
@@ -3188,18 +3197,19 @@ local UnitSpecific = {
 		self.Health.colorHappiness = true
 
 		if petShowAura then
-			local auras = CreateAuraWidget(self, "BOTH", petWidth, petHeight, 2, "LEFT", "DOWN")
+			local auras = CreateAuraWidget(self, "HELPFUL", petWidth, petHeight, 2, "LEFT", "DOWN")
 			auras:SetPoint("TOPRIGHT", self, "TOPLEFT", -3, 0)
 		end
 
 		if petCastBar then
-			local cb = CreateFrame("StatusBar", nil, self)
-			cb:SetStatusBarTexture(TEXTURE)
-			cb:SetStatusBarColor(1, 0.25, 0.35, 0.5)
-			cb:SetAllPoints(self.Health)
-			cb:SetToplevel(true)
-			cb.smoothing = smoothInterpolation
-			self.Castbar = cb
+			CreateCastbar(self, self.Power or self.Health, -2, false)
+		end
+
+		if ns.GetOptionsDB().petShowDebuffs == true then
+			local petDebuffSize = math.max(12, petHeight)
+			local debuffs = CreateAuraWidget(self, "HARMFUL", petWidth, petDebuffSize, 2, "RIGHT", "DOWN")
+			debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, petCastBar and -18 or -4)
+			self.PetDebuffs = debuffs
 		end
 	end,
 
@@ -3384,6 +3394,10 @@ local UnitSpecific = {
 		RegisterClickCastFrame(self)
 		local hp = self.Health
 		local debuffPos = ns.GetPartyDebuffPosition and ns.GetPartyDebuffPosition() or "right"
+		local showPartyCast = (ns.GetOptionsDB().partyCastBar == true)
+		if showPartyCast then
+			CreateCastbar(self, self.Power, -2, false)
+		end
 		if partyShowBuffs then
 			local buffs = CreateAuraWidget(self, "HELPFUL", partyWidth, partyBuffSize, partyBuffSpacing, "RIGHT", "UP")
 			buffs:SetPoint("BOTTOMLEFT", self, "TOPLEFT", 0, 4)
@@ -3391,7 +3405,7 @@ local UnitSpecific = {
 		if partyShowDebuffs then
 			local debuffs = CreateAuraWidget(self, "HARMFUL", partyWidth, partyDebuffSize, partyDebuffSpacing, "RIGHT", "DOWN")
 			if debuffPos == "below" then
-				debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -4)
+				debuffs:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, showPartyCast and -18 or -4)
 			else
 				local yOff = math.max(0, math.floor((partyHeight - partyDebuffSize) / 2))
 				debuffs:SetPoint("TOPLEFT", self, "TOPRIGHT", 8, -yOff)
@@ -3420,7 +3434,7 @@ local UnitSpecific = {
 		self.SummonIndicator = summon
 
 		if partyShowDebuffs and debuffPos == "right" then
-			CreatePrivateAuras(self, 18, "TOPLEFT", self, "BOTTOMLEFT", 0, -4, "RIGHT")
+			CreatePrivateAuras(self, 18, "TOPLEFT", self, "BOTTOMLEFT", 0, showPartyCast and -18 or -4, "RIGHT")
 		else
 			CreatePrivateAuras(self, 18, "LEFT", self, "RIGHT", 6, 0, "RIGHT")
 		end
