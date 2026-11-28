@@ -2232,6 +2232,7 @@ do
 		pending = false
 		local pos = ns.GetPartyDebuffPosition and ns.GetPartyDebuffPosition() or "right"
 		local petPos = ns.GetPartyPetPosition and ns.GetPartyPetPosition() or "below"
+		local petGap = ns.GetPartyPetSpacing and ns.GetPartyPetSpacing() or 4
 		local petH = ns.GetSize and ns.GetSize("partyPetHeight") or partyPetAndTargetHeight
 		local size = sizeOverride or partyDebuffSize
 		local yOff = math.max(0, math.floor((partyHeight - size) / 2))
@@ -2240,9 +2241,10 @@ do
 			if pFrame and pFrame.PartyDebuffs then
 				pFrame.PartyDebuffs:ClearAllPoints()
 				if pos == "below" then
+					local baseOffset = pFrame.Castbar and 16 or 0
 					local y = pFrame.Castbar and -18 or -4
 					if pFrame.PartyPet and petPos == "below" then
-						y = y - (petH + 4)
+						y = -(baseOffset + petGap + petH + 4)
 					end
 					pFrame.PartyDebuffs:SetPoint("TOPLEFT", pFrame, "BOTTOMLEFT", 0, y)
 				else
@@ -2275,6 +2277,7 @@ do
 		end
 		local petPos = ns.GetPartyPetPosition and ns.GetPartyPetPosition() or "below"
 		local debuffPos = ns.GetPartyDebuffPosition and ns.GetPartyDebuffPosition() or "right"
+		local petGap = ns.GetPartyPetSpacing and ns.GetPartyPetSpacing() or 4
 		local petH = ns.GetSize and ns.GetSize("partyPetHeight") or partyPetAndTargetHeight
 		local yCenter = math.max(0, math.floor((partyHeight - petH) / 2))
 		for i = 1, 4 do
@@ -2284,15 +2287,16 @@ do
 				petFrame:ClearAllPoints()
 				if petPos == "left" then
 					local anchorFrame = pFrame.PortraitHolder or pFrame
-					petFrame:SetPoint("TOPRIGHT", anchorFrame, "TOPLEFT", pFrame.PortraitHolder and -6 or -8, -yCenter)
+					petFrame:SetPoint("TOPRIGHT", anchorFrame, "TOPLEFT", -petGap, -yCenter)
 				elseif petPos == "right" then
 					if pFrame.PartyDebuffs and debuffPos == "right" then
-						petFrame:SetPoint("BOTTOMLEFT", pFrame, "BOTTOMRIGHT", 8, 0)
+						petFrame:SetPoint("BOTTOMLEFT", pFrame, "BOTTOMRIGHT", petGap, 0)
 					else
-						petFrame:SetPoint("TOPLEFT", pFrame, "TOPRIGHT", 8, -yCenter)
+						petFrame:SetPoint("TOPLEFT", pFrame, "TOPRIGHT", petGap, -yCenter)
 					end
 				else
-					petFrame:SetPoint("TOPLEFT", pFrame, "BOTTOMLEFT", 0, pFrame.Castbar and -18 or -4)
+					local baseOffset = pFrame.Castbar and 16 or 0
+					petFrame:SetPoint("TOPLEFT", pFrame, "BOTTOMLEFT", 0, -(baseOffset + petGap))
 				end
 			end
 		end

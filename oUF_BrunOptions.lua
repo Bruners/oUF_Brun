@@ -28,6 +28,7 @@ local DEFAULT_OPTIONS = {
 	partyDebuffPosition = "right",
 	showPartyPets = true,
 	partyPetPosition = "below",
+	partyPetSpacing = 4,
 	rangeAlpha = 0.45,
 	showRaidFrames = true,
 	enableClickCast = false,
@@ -265,6 +266,12 @@ function ns.GetPartyPetPosition()
 	return "below"
 end
 
+function ns.GetPartyPetSpacing()
+	local spacing = tonumber(ns.GetOptionsDB().partyPetSpacing)
+	if not spacing then return 4 end
+	return math.max(0, math.min(40, math.floor(spacing + 0.5)))
+end
+
 function ns.GetFadeOutAlpha()
 	local a = tonumber(ns.GetOptionsDB().fadeOutAlpha)
 	if not a then return 0.35 end
@@ -450,6 +457,7 @@ local LIVE_OPTIONS = {
 	partySpacing = true,
 	partyDebuffPosition = true,
 	partyPetPosition = true,
+	partyPetSpacing = true,
 	bossSpacing = true,
 	rangeAlpha = true,
 }
@@ -483,7 +491,7 @@ local TAB_OPTION_KEYS = {
 	},
 	group = {
 		"showRaidFrames", "hidePartyInRaid", "hideCompactRaidManager", "showPartyPets",
-		"partyPetPosition", "partyDebuffPosition", "partySpacing", "rangeAlpha",
+		"partyPetPosition", "partyPetSpacing", "partyDebuffPosition", "partySpacing", "rangeAlpha",
 	},
 	clickcast = {
 		"enableClickCast",
@@ -1065,6 +1073,8 @@ function ns.ToggleConfigGUI()
 		local maxVal = cfg.maxVal or 100
 		local step = cfg.step or 1
 		local showLive = (cfg.live ~= false)
+		local xLeft = cfg.xLeft or 14
+		local xRight = cfg.xRight or -14
 
 		if cfg.divider ~= false then
 			local div = parent:CreateTexture(nil, "BORDER")
@@ -1076,7 +1086,7 @@ function ns.ToggleConfigGUI()
 
 		local lbl = parent:CreateFontString(nil, "OVERLAY")
 		lbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
-		lbl:SetPoint("TOPLEFT", 14, -(yOff + 8))
+		lbl:SetPoint("TOPLEFT", xLeft, -(yOff + 8))
 		lbl:SetTextColor(0.92, 0.92, 0.95)
 		lbl:SetText(cfg.label or "")
 
@@ -1084,7 +1094,7 @@ function ns.ToggleConfigGUI()
 		if showLive then
 			liveBadge = parent:CreateFontString(nil, "OVERLAY")
 			liveBadge:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
-			liveBadge:SetPoint("TOPRIGHT", -14, -(yOff + 9))
+			liveBadge:SetPoint("TOPRIGHT", xRight, -(yOff + 9))
 			liveBadge:SetTextColor(0.35, 0.78, 0.45)
 			liveBadge:SetText("LIVE")
 		end
@@ -1092,16 +1102,16 @@ function ns.ToggleConfigGUI()
 		local valText = parent:CreateFontString(nil, "OVERLAY")
 		valText:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
 		if liveBadge then
-			valText:SetPoint("RIGHT", liveBadge, "LEFT", -10, 0)
+			valText:SetPoint("RIGHT", liveBadge, "LEFT", -6, 0)
 		else
-			valText:SetPoint("TOPRIGHT", -14, -(yOff + 8))
+			valText:SetPoint("TOPRIGHT", xRight, -(yOff + 8))
 		end
 		valText:SetJustifyH("RIGHT")
 		valText:SetTextColor(1, 0.84, 0.45)
 
 		local slider = CreateFrame("Slider", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-		slider:SetPoint("TOPLEFT", 14, -(yOff + 28))
-		slider:SetPoint("TOPRIGHT", -14, -(yOff + 28))
+		slider:SetPoint("TOPLEFT", xLeft, -(yOff + 28))
+		slider:SetPoint("TOPRIGHT", xRight, -(yOff + 28))
 		slider:SetHeight(14)
 		slider:SetOrientation("HORIZONTAL")
 		slider:SetMinMaxValues(minVal, maxVal)
@@ -1131,13 +1141,13 @@ function ns.ToggleConfigGUI()
 
 		local minLbl = parent:CreateFontString(nil, "OVERLAY")
 		minLbl:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
-		minLbl:SetPoint("TOPLEFT", 14, -(yOff + 45))
+		minLbl:SetPoint("TOPLEFT", xLeft, -(yOff + 45))
 		minLbl:SetTextColor(0.55, 0.55, 0.62)
 		minLbl:SetText(cfg.minText or tostring(minVal))
 
 		local maxLbl = parent:CreateFontString(nil, "OVERLAY")
 		maxLbl:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
-		maxLbl:SetPoint("TOPRIGHT", -14, -(yOff + 45))
+		maxLbl:SetPoint("TOPRIGHT", xRight, -(yOff + 45))
 		maxLbl:SetTextColor(0.55, 0.55, 0.62)
 		maxLbl:SetText(cfg.maxText or tostring(maxVal))
 
@@ -2180,8 +2190,10 @@ function ns.ToggleConfigGUI()
 		posRightBtn:SetPoint("RIGHT", posBelowBtn, "LEFT", -6, 0)
 
 		local spacingSlider = CreateFlatSlider(card1, {
-			label = "Party Frame Spacing",
+			label = "Party Spacing",
 			yOffset = 158,
+			xLeft = 14,
+			xRight = -214,
 			minVal = 0,
 			maxVal = 120,
 			step = 1,
@@ -2194,6 +2206,27 @@ function ns.ToggleConfigGUI()
 				if ns.ApplyPartySpacing then
 					ns.ApplyPartySpacing()
 				end
+			end,
+		})
+
+		local petSpacingSlider = CreateFlatSlider(card1, {
+			label = "Pet Spacing",
+			yOffset = 158,
+			divider = false,
+			xLeft = 214,
+			xRight = -14,
+			minVal = 0,
+			maxVal = 40,
+			step = 1,
+			minText = "0 px",
+			maxText = "40 px",
+			formatVal = function(v) return v .. " px" end,
+			tip = "Gap in pixels between each party frame (or portrait) and its party pet (0-40 px). Applies live out of combat (works with Test Frames).",
+			disabledTip = "Requires 'Show Party Pets' to be enabled.",
+			onChanged = function(v)
+				ns.GetOptionsDB().partyPetSpacing = v
+				if ns.ApplyPartyPetPosition then ns.ApplyPartyPetPosition() end
+				if ns.ApplyPartyDebuffPosition then ns.ApplyPartyDebuffPosition() end
 			end,
 		})
 
@@ -2253,6 +2286,8 @@ function ns.ToggleConfigGUI()
 			posRightBtn:SetActive(pos == "right")
 			posBelowBtn:SetActive(pos == "below")
 			spacingSlider:SetValueSilent(ns.GetPartySpacing())
+			petSpacingSlider:SetValueSilent(ns.GetPartyPetSpacing())
+			petSpacingSlider:SetEnabledState(petEnabled)
 			rangeSlider:SetValueSilent(math.floor(ns.GetRangeAlpha() * 100 + 0.5))
 
 			local ccEnabled = opts.enableClickCast == true
