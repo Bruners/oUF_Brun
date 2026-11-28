@@ -32,6 +32,7 @@ local DEFAULT_OPTIONS = {
 	showRaidFrames = true,
 	enableClickCast = false,
 	showPortraits = false,
+	showPartyPortraits = false,
 	use2DPortraits = false,
 	showBossFrames = true,
 	bossSpacing = 48,
@@ -459,7 +460,7 @@ local TAB_OPTION_KEYS = {
 		"enableFader", "fadeOutAlpha", "removeBuffs", "showMinimapIcon",
 	},
 	frames = {
-		"showPortraits", "use2DPortraits", "showTargetTarget", "showTargetTargetTarget",
+		"showPortraits", "showPartyPortraits", "use2DPortraits", "showTargetTarget", "showTargetTargetTarget",
 		"showBossFrames", "bossSpacing", "enableClassPower", "useComboDots", "enableSwingBar",
 		"enableTotemBar", "oUFRuneBar",
 	},
@@ -769,7 +770,17 @@ function ns.ToggleConfigGUI()
 	local function RefreshDependencies()
 		local curOpts = ns.GetOptionsDB()
 		for _, item in ipairs(dependentControls) do
-			local enabled = curOpts[item.dependsOn] and true or false
+			local enabled = false
+			if type(item.dependsOn) == "table" then
+				for _, k in ipairs(item.dependsOn) do
+					if curOpts[k] then
+						enabled = true
+						break
+					end
+				end
+			else
+				enabled = curOpts[item.dependsOn] and true or false
+			end
 			item.setEnabled(enabled)
 		end
 	end
@@ -1692,14 +1703,14 @@ function ns.ToggleConfigGUI()
 		local p = pages.frames
 		local card1 = CreateCard(p, "Frames & Portraits", 178, 8)
 		local frameToggles = {
-			{ key = "showPortraits", label = "Show Portraits (Player & Target)", tip = "Display framed portrait boxes beside Player and Target frames." },
+			{ key = "showPortraits", label = "Portraits (Player & Target)", tip = "Display framed portrait boxes beside Player and Target frames." },
 			{
 				key = "use2DPortraits",
 				label = "Use 2D Portraits (instead of 3D Models)",
 				tip = "Render cropped square 2D portraits instead of animated 3D models.",
 				indent = true,
-				dependsOn = "showPortraits",
-				dependsLabel = "Show Portraits (Player & Target)",
+				dependsOn = { "showPortraits", "showPartyPortraits" },
+				dependsLabel = "Show Portraits",
 			},
 			{ key = "showTargetTarget", label = "Show Target of Target (ToT)", tip = "Display your target's current target." },
 			{ key = "showTargetTargetTarget", label = "Show Target of Target's Target (ToToT)", tip = "Display your target's target's target below ToT." },
@@ -1707,12 +1718,25 @@ function ns.ToggleConfigGUI()
 		}
 		for i, def in ipairs(frameToggles) do
 			local row = CreateToggleRow(card1, def, i)
-			if def.key == "showBossFrames" then
+			if def.key == "showPortraits" then
+				row:ClearAllPoints()
+				row:SetPoint("TOPLEFT", 8, -32)
+				row:SetPoint("TOPRIGHT", -186, -32)
+			elseif def.key == "showBossFrames" then
 				row:HookScript("OnClick", function()
 					if RefreshFramesUI then RefreshFramesUI() end
 				end)
 			end
 		end
+
+		local partyPortraitRow = CreateToggleRow(card1, {
+			key = "showPartyPortraits",
+			label = "Party Portraits",
+			tip = "Display framed portrait boxes on the left side of Party frames.",
+		}, 1)
+		partyPortraitRow:ClearAllPoints()
+		partyPortraitRow:SetPoint("TOPLEFT", 230, -32)
+		partyPortraitRow:SetPoint("TOPRIGHT", -8, -32)
 
 		local bossLbl = card1:CreateFontString(nil, "OVERLAY")
 		bossLbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")

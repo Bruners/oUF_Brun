@@ -2283,7 +2283,8 @@ do
 			if petFrame then
 				petFrame:ClearAllPoints()
 				if petPos == "left" then
-					petFrame:SetPoint("TOPRIGHT", pFrame, "TOPLEFT", -8, -yCenter)
+					local anchorFrame = pFrame.PortraitHolder or pFrame
+					petFrame:SetPoint("TOPRIGHT", anchorFrame, "TOPLEFT", pFrame.PortraitHolder and -6 or -8, -yCenter)
 				elseif petPos == "right" then
 					if pFrame.PartyDebuffs and debuffPos == "right" then
 						petFrame:SetPoint("BOTTOMLEFT", pFrame, "BOTTOMRIGHT", 8, 0)
@@ -2938,6 +2939,11 @@ local function CreatePortrait(self, side)
 				element:SetModelAlpha(self:GetAlpha())
 			end
 		end
+		hooksecurefunc(self, "SetAlpha", function(_, alpha)
+			if portrait.SetModelAlpha then
+				portrait:SetModelAlpha(alpha)
+			end
+		end)
 	end
 
 	self.PortraitHolder = holder
@@ -3507,6 +3513,9 @@ local UnitSpecific = {
 		else
 			CreatePrivateAuras(self, 18, "LEFT", self, "RIGHT", 6, 0, "RIGHT")
 		end
+		if ns.GetOptionsDB().showPartyPortraits == true then
+			CreatePortrait(self, "LEFT")
+		end
 	end,
 
 	partypet = function(self)
@@ -3932,7 +3941,10 @@ local function SpawnFrames(self)
 	partySpacing = ns.GetPartySpacing and ns.GetPartySpacing() or 32
 	local partyGroupHeight = partyHeight * 4 + partySpacing * 3
 	local partyGroup = CreateFrame("Frame", "oUF_BrunPartyGroup", UIParent, "SecureHandlerStateTemplate")
-	local partyAnchor = CreatePositionAnchor("Party", partyWidth, partyGroupHeight, oUF_Brun.Party)
+	local partyDefault = (ns.GetOptionsDB().showPartyPortraits == true)
+		and { "TOPLEFT", UIParent, "TOPLEFT", 20 + partyHeight + 5, -50 }
+		or oUF_Brun.Party
+	local partyAnchor = CreatePositionAnchor("Party", partyWidth, partyGroupHeight, partyDefault)
 	partyAnchorRef = partyAnchor
 	partyGroupRef = partyGroup
 	partyGroup:SetPoint("TOPLEFT", partyAnchor, "TOPLEFT", 0, 0)
