@@ -2222,6 +2222,7 @@ do
 					if pending then
 						pending = false
 						ApplyPartyDebuffPosition(savedSizeOverride)
+						if ns.ApplyPartyPetPosition then ns.ApplyPartyPetPosition() end
 					end
 				end)
 			end
@@ -2230,6 +2231,8 @@ do
 		end
 		pending = false
 		local pos = ns.GetPartyDebuffPosition and ns.GetPartyDebuffPosition() or "right"
+		local petPos = ns.GetPartyPetPosition and ns.GetPartyPetPosition() or "below"
+		local petH = ns.GetSize and ns.GetSize("partyPetHeight") or partyPetAndTargetHeight
 		local size = sizeOverride or partyDebuffSize
 		local yOff = math.max(0, math.floor((partyHeight - size) / 2))
 		for i = 1, 4 do
@@ -2237,9 +2240,58 @@ do
 			if pFrame and pFrame.PartyDebuffs then
 				pFrame.PartyDebuffs:ClearAllPoints()
 				if pos == "below" then
-					pFrame.PartyDebuffs:SetPoint("TOPLEFT", pFrame, "BOTTOMLEFT", 0, pFrame.Castbar and -18 or -4)
+					local y = pFrame.Castbar and -18 or -4
+					if pFrame.PartyPet and petPos == "below" then
+						y = y - (petH + 4)
+					end
+					pFrame.PartyDebuffs:SetPoint("TOPLEFT", pFrame, "BOTTOMLEFT", 0, y)
 				else
-					pFrame.PartyDebuffs:SetPoint("TOPLEFT", pFrame, "TOPRIGHT", 8, -yOff)
+					if pFrame.PartyPet and petPos == "right" then
+						pFrame.PartyDebuffs:SetPoint("TOPLEFT", pFrame, "TOPRIGHT", 8, 0)
+					else
+						pFrame.PartyDebuffs:SetPoint("TOPLEFT", pFrame, "TOPRIGHT", 8, -yOff)
+					end
+				end
+			end
+		end
+	end
+
+	ns.ApplyPartyPetPosition = function()
+		if InCombatLockdown() then
+			pending = true
+			if not combatFrame then
+				combatFrame = CreateFrame("Frame")
+				combatFrame:SetScript("OnEvent", function(f)
+					f:UnregisterAllEvents()
+					if pending then
+						pending = false
+						ApplyPartyDebuffPosition(savedSizeOverride)
+						if ns.ApplyPartyPetPosition then ns.ApplyPartyPetPosition() end
+					end
+				end)
+			end
+			combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+			return
+		end
+		local petPos = ns.GetPartyPetPosition and ns.GetPartyPetPosition() or "below"
+		local debuffPos = ns.GetPartyDebuffPosition and ns.GetPartyDebuffPosition() or "right"
+		local petH = ns.GetSize and ns.GetSize("partyPetHeight") or partyPetAndTargetHeight
+		local yCenter = math.max(0, math.floor((partyHeight - petH) / 2))
+		for i = 1, 4 do
+			local pFrame = _G["oUF_Party" .. i]
+			local petFrame = pFrame and (pFrame.PartyPet or _G["oUF_PartyPet" .. i])
+			if petFrame then
+				petFrame:ClearAllPoints()
+				if petPos == "left" then
+					petFrame:SetPoint("TOPRIGHT", pFrame, "TOPLEFT", -8, -yCenter)
+				elseif petPos == "right" then
+					if pFrame.PartyDebuffs and debuffPos == "right" then
+						petFrame:SetPoint("BOTTOMLEFT", pFrame, "BOTTOMRIGHT", 8, 0)
+					else
+						petFrame:SetPoint("TOPLEFT", pFrame, "TOPRIGHT", 8, -yCenter)
+					end
+				else
+					petFrame:SetPoint("TOPLEFT", pFrame, "BOTTOMLEFT", 0, pFrame.Castbar and -18 or -4)
 				end
 			end
 		end
@@ -2452,6 +2504,7 @@ do
 		ApplyThreatSettings()
 		ApplyPartySpacing()
 		ApplyPartyDebuffPosition()
+		if ns.ApplyPartyPetPosition then ns.ApplyPartyPetPosition() end
 		ApplyBossSpacing()
 		ApplyFaderSettings()
 		ApplyRangeAlpha()
@@ -2605,6 +2658,22 @@ local function ToggleTestFrames(forceOff)
 				pf.__unit = unit
 				RegisterUnitWatch(pf)
 				if pf.UpdateAllElements then pf:UpdateAllElements("ForceUpdate") end
+			end
+		end
+		local ppf = _G["oUF_PartyPet" .. i]
+		if ppf then
+			if testModeActive then
+				UnregisterUnitWatch(ppf)
+				ppf:SetAttribute("unit", "player")
+				ppf.__unit = "player"
+				ppf:Show()
+				if ppf.UpdateAllElements then ppf:UpdateAllElements("ForceUpdate") end
+			else
+				local petUnit = "partypet" .. i
+				ppf:SetAttribute("unit", petUnit)
+				ppf.__unit = petUnit
+				RegisterUnitWatch(ppf)
+				if ppf.UpdateAllElements then ppf:UpdateAllElements("ForceUpdate") end
 			end
 		end
 	end
@@ -3440,6 +3509,10 @@ local UnitSpecific = {
 		end
 	end,
 
+	partypet = function(self)
+		RegisterClickCastFrame(self)
+	end,
+
 	focus = function(self)
 		if focusCastBar then
 			CreateCastbar(self, self.Power, -2, false)
@@ -3469,7 +3542,7 @@ local function Shared(self, unit, isSingle)
 	local isPartySubUnit = (unit == "partypet" or unit == "partytarget")
 	local isTargetTarget = (unit == "targettarget" or unit == "targettargettarget" or unit == "focustarget")
 	local hasPowerBar = not isPartySubUnit
-	local fontSize = isTargetTarget and SMALL_FONT_SIZE or FONT_SIZE
+	local fontSize = (isTargetTarget or isPartySubUnit) and SMALL_FONT_SIZE or FONT_SIZE
 
 	local frameWidth, frameHeight = width, height
 	local hpHeight = height * 0.6
@@ -3490,7 +3563,9 @@ local function Shared(self, unit, isSingle)
 		frameWidth, frameHeight = focusWidth, focusHeight
 		hpHeight = focusHeight * 0.6
 	elseif isPartySubUnit then
-		hpHeight = partyPetAndTargetHeight
+		frameWidth = ns.GetSize and ns.GetSize("partyPetWidth") or partyPetAndTargetWidth
+		frameHeight = ns.GetSize and ns.GetSize("partyPetHeight") or partyPetAndTargetHeight
+		hpHeight = frameHeight
 	elseif unit == "party" then
 		frameWidth, frameHeight = partyWidth, partyHeight
 		hpHeight = partyHeight * 0.6
@@ -3506,7 +3581,7 @@ local function Shared(self, unit, isSingle)
 
 	ApplyBackdrop(self)
 	self:SetSize(frameWidth, frameHeight)
-	if (unit == "party" or unit == "raid" or not isSingle) and unit ~= "partytarget" then
+	if (unit == "party" or unit == "partypet" or unit == "raid" or not isSingle) and unit ~= "partytarget" then
 		self.Range = {
 			insideAlpha = 1,
 			outsideAlpha = ns.GetRangeAlpha and ns.GetRangeAlpha() or 0.45,
@@ -3863,6 +3938,7 @@ local function SpawnFrames(self)
 	partyGroup:SetPoint("TOPLEFT", partyAnchor, "TOPLEFT", 0, 0)
 	partyGroup:SetSize(partyWidth, partyGroupHeight)
 
+	local showPartyPets = (ns.GetOptionsDB().showPartyPets ~= false)
 	local prevParty
 	for i = 1, 4 do
 		local partyFrame = self:Spawn("party" .. i, "oUF_Party" .. i)
@@ -3885,7 +3961,28 @@ local function SpawnFrames(self)
 				frame:UpdateAllElements("UNIT_CONNECTION")
 			end
 		end, true)
+
+		if showPartyPets then
+			local petFrame = self:Spawn("partypet" .. i, "oUF_PartyPet" .. i)
+			petFrame:SetParent(partyGroup)
+			partyFrame.PartyPet = petFrame
+			petFrame:RegisterEvent("UNIT_PET", function(frame)
+				if frame.__unit and UnitExists(frame.__unit) then
+					frame:UpdateAllElements("UNIT_PET")
+				end
+			end)
+			petFrame:RegisterEvent("GROUP_ROSTER_UPDATE", function(frame)
+				if frame.__unit and UnitExists(frame.__unit) then
+					frame:UpdateAllElements("GROUP_ROSTER_UPDATE")
+				end
+			end, true)
+		end
 	end
+
+	if showPartyPets and ns.ApplyPartyPetPosition then
+		ns.ApplyPartyPetPosition()
+	end
+	ApplyPartyDebuffPosition()
 
 	RegisterStateDriver(partyGroup, "visibility", hidePartyInRaid and "[group:raid] hide; [group:party] show; hide" or "[group:party] show; hide")
 

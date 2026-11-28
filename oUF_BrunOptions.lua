@@ -26,6 +26,8 @@ local DEFAULT_OPTIONS = {
 	hidePartyInRaid = false,
 	partySpacing = 32,
 	partyDebuffPosition = "right",
+	showPartyPets = true,
+	partyPetPosition = "below",
 	rangeAlpha = 0.45,
 	showRaidFrames = true,
 	enableClickCast = false,
@@ -66,6 +68,8 @@ local DEFAULT_OPTIONS = {
 	targetHeight = 35,
 	partyWidth = 206,
 	partyHeight = 35,
+	partyPetWidth = 95,
+	partyPetHeight = 15,
 	raidWidth = 85,
 	raidHeight = 24,
 	focusWidth = 200,
@@ -254,6 +258,12 @@ function ns.GetPartyDebuffPosition()
 	return (ns.GetOptionsDB().partyDebuffPosition == "below") and "below" or "right"
 end
 
+function ns.GetPartyPetPosition()
+	local pos = ns.GetOptionsDB().partyPetPosition
+	if pos == "right" or pos == "left" then return pos end
+	return "below"
+end
+
 function ns.GetFadeOutAlpha()
 	local a = tonumber(ns.GetOptionsDB().fadeOutAlpha)
 	if not a then return 0.35 end
@@ -289,6 +299,8 @@ local SIZE_LIMITS = {
 	targetHeight = { min = 20, max = 70, def = 35 },
 	partyWidth = { min = 120, max = 360, def = 206 },
 	partyHeight = { min = 20, max = 70, def = 35 },
+	partyPetWidth = { min = 60, max = 240, def = 95 },
+	partyPetHeight = { min = 10, max = 40, def = 15 },
 	raidWidth = { min = 50, max = 160, def = 85 },
 	raidHeight = { min = 16, max = 50, def = 24 },
 	focusWidth = { min = 110, max = 360, def = 200 },
@@ -436,6 +448,7 @@ local LIVE_OPTIONS = {
 	smoothBars = true,
 	partySpacing = true,
 	partyDebuffPosition = true,
+	partyPetPosition = true,
 	bossSpacing = true,
 	rangeAlpha = true,
 }
@@ -452,7 +465,8 @@ local TAB_OPTION_KEYS = {
 	},
 	sizing = {
 		"playerWidth", "playerHeight", "targetWidth", "targetHeight",
-		"partyWidth", "partyHeight", "raidWidth", "raidHeight",
+		"partyWidth", "partyHeight", "partyPetWidth", "partyPetHeight",
+		"raidWidth", "raidHeight",
 		"focusWidth", "focusHeight", "totWidth", "totHeight",
 		"petWidth", "petHeight", "bossWidth", "bossHeight",
 		"swingWidth", "swingHeight",
@@ -467,7 +481,8 @@ local TAB_OPTION_KEYS = {
 		"desaturateOtherDebuffs", "highlightDispellableDebuffs", "highlightExpiringAuras",
 	},
 	group = {
-		"showRaidFrames", "hidePartyInRaid", "hideCompactRaidManager", "partyDebuffPosition", "partySpacing", "rangeAlpha",
+		"showRaidFrames", "hidePartyInRaid", "hideCompactRaidManager", "showPartyPets",
+		"partyPetPosition", "partyDebuffPosition", "partySpacing", "rangeAlpha",
 	},
 	clickcast = {
 		"enableClickCast",
@@ -1856,6 +1871,7 @@ function ns.ToggleConfigGUI()
 			{ label = "Player", wKey = "playerWidth", hKey = "playerHeight" },
 			{ label = "Target", wKey = "targetWidth", hKey = "targetHeight" },
 			{ label = "Party", wKey = "partyWidth", hKey = "partyHeight" },
+			{ label = "Party Pet", wKey = "partyPetWidth", hKey = "partyPetHeight" },
 			{ label = "Raid", wKey = "raidWidth", hKey = "raidHeight" },
 			{ label = "Focus", wKey = "focusWidth", hKey = "focusHeight" },
 			{ label = "ToT / ToToT", wKey = "totWidth", hKey = "totHeight" },
@@ -1864,12 +1880,12 @@ function ns.ToggleConfigGUI()
 			{ label = "Swing Bar", wKey = "swingWidth", hKey = "swingHeight" },
 		}
 		for idx, def in ipairs(sizeRows) do
-			local rowY = 45 + (idx - 1) * 22
+			local rowY = 43 + (idx - 1) * 20
 			if idx % 2 == 1 then
 				local stripe = card1:CreateTexture(nil, "BACKGROUND")
 				stripe:SetPoint("TOPLEFT", 10, -rowY + 1)
 				stripe:SetPoint("TOPRIGHT", -10, -rowY + 1)
-				stripe:SetHeight(20)
+				stripe:SetHeight(19)
 				stripe:SetColorTexture(1, 1, 1, 0.025)
 			end
 
@@ -2042,7 +2058,7 @@ function ns.ToggleConfigGUI()
 	local RefreshGroupUI
 	do
 		local p = pages.group
-		local card1 = CreateCard(p, "Group & Raid Layout", 258, 8)
+		local card1 = CreateCard(p, "Group & Raid Layout", 268, 6)
 		local groupToggles = {
 			{ key = "showRaidFrames", label = "Enable Raid Frames (8-Group Compact Grid)", tip = "Replace Blizzard raid frames with the compact 8-group oUF_Brun grid." },
 			{ key = "hidePartyInRaid", label = "Hide Party Frames when in a Raid", tip = "Hide the 4-member party stack automatically while in a raid group." },
@@ -2052,30 +2068,74 @@ function ns.ToggleConfigGUI()
 			CreateToggleRow(card1, def, i)
 		end
 
+		local petRow = CreateToggleRow(card1, {
+			key = "showPartyPets",
+			label = "Show Party Pets",
+			tip = "Display pet health bars for party members who have an active pet.",
+		}, 4)
+		petRow:ClearAllPoints()
+		petRow:SetPoint("TOPLEFT", 8, -104)
+		petRow:SetPoint("TOPRIGHT", -200, -104)
+		petRow:HookScript("OnClick", function()
+			if RefreshGroupUI then RefreshGroupUI() end
+		end)
+
+		local petPosLive = card1:CreateFontString(nil, "OVERLAY")
+		petPosLive:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
+		petPosLive:SetPoint("TOPRIGHT", -14, -110)
+		petPosLive:SetTextColor(0.35, 0.78, 0.45)
+		petPosLive:SetText("LIVE")
+
+		local function MakePetPosBtn(id, label, w, tip)
+			local b = CreateActionButton(card1, label, w, 20, function()
+				ns.GetOptionsDB().partyPetPosition = id
+				if ns.ApplyPartyPetPosition then ns.ApplyPartyPetPosition() end
+				if ns.ApplyPartyDebuffPosition then ns.ApplyPartyDebuffPosition() end
+				if RefreshGroupUI then RefreshGroupUI() end
+			end)
+			b:HookScript("OnEnter", function(self)
+				GameTooltip:SetOwner(self, "ANCHOR_TOP")
+				GameTooltip:AddLine("Party Pets: " .. label, 1, 0.82, 0)
+				GameTooltip:AddLine(tip, 0.85, 0.85, 0.9, true)
+				GameTooltip:AddLine("Applies immediately out of combat.", 0.35, 0.85, 0.45)
+				GameTooltip:Show()
+			end)
+			b:HookScript("OnLeave", function() GameTooltip:Hide() end)
+			return b
+		end
+
+		local petLeftBtn = MakePetPosBtn("left", "Left", 44, "Anchor party pet frames centered on the left side of each party frame.")
+		petLeftBtn:SetPoint("RIGHT", petPosLive, "LEFT", -8, 0)
+
+		local petRightBtn = MakePetPosBtn("right", "Right", 48, "Anchor party pet frames on the right side of each party frame.")
+		petRightBtn:SetPoint("RIGHT", petLeftBtn, "LEFT", -4, 0)
+
+		local petBelowBtn = MakePetPosBtn("below", "Below", 50, "Anchor party pet frames underneath each party frame.")
+		petBelowBtn:SetPoint("RIGHT", petRightBtn, "LEFT", -4, 0)
+
 		local posDiv = card1:CreateTexture(nil, "BORDER")
-		posDiv:SetPoint("TOPLEFT", 12, -106)
-		posDiv:SetPoint("TOPRIGHT", -12, -106)
+		posDiv:SetPoint("TOPLEFT", 12, -129)
+		posDiv:SetPoint("TOPRIGHT", -12, -129)
 		posDiv:SetHeight(1)
 		posDiv:SetColorTexture(1, 1, 1, 0.06)
 
 		local posLbl = card1:CreateFontString(nil, "OVERLAY")
 		posLbl:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
-		posLbl:SetPoint("TOPLEFT", 14, -115)
+		posLbl:SetPoint("TOPLEFT", 14, -137)
 		posLbl:SetTextColor(0.92, 0.92, 0.95)
 		posLbl:SetText("Party Debuffs Position")
 
 		local posLive = card1:CreateFontString(nil, "OVERLAY")
 		posLive:SetFont(FONT, SMALL_FONT_SIZE - 2, "OUTLINE")
-		posLive:SetPoint("TOPRIGHT", -14, -116)
+		posLive:SetPoint("TOPRIGHT", -14, -138)
 		posLive:SetTextColor(0.35, 0.78, 0.45)
 		posLive:SetText("LIVE")
 
 		local function MakePosBtn(id, label, tip)
 			local b = CreateActionButton(card1, label, 64, 20, function()
 				ns.GetOptionsDB().partyDebuffPosition = id
-				if ns.ApplyPartyDebuffPosition then
-					ns.ApplyPartyDebuffPosition()
-				end
+				if ns.ApplyPartyDebuffPosition then ns.ApplyPartyDebuffPosition() end
+				if ns.ApplyPartyPetPosition then ns.ApplyPartyPetPosition() end
 				if RefreshGroupUI then RefreshGroupUI() end
 			end)
 			b:HookScript("OnEnter", function(self)
@@ -2097,7 +2157,7 @@ function ns.ToggleConfigGUI()
 
 		local spacingSlider = CreateFlatSlider(card1, {
 			label = "Party Frame Spacing",
-			yOffset = 138,
+			yOffset = 158,
 			minVal = 0,
 			maxVal = 120,
 			step = 1,
@@ -2115,7 +2175,7 @@ function ns.ToggleConfigGUI()
 
 		local rangeSlider = CreateFlatSlider(card1, {
 			label = "Out-of-Range Opacity (Party & Raid)",
-			yOffset = 198,
+			yOffset = 214,
 			minVal = 20,
 			maxVal = 90,
 			step = 5,
@@ -2131,34 +2191,47 @@ function ns.ToggleConfigGUI()
 			end,
 		})
 
-		local card2 = CreateCard(p, "Healing & Click-Casting", 74, 272)
+		local card2 = CreateCard(p, "Healing & Click-Casting", 68, 280)
 		local clickCastStatusText = card2:CreateFontString(nil, "OVERLAY")
 		clickCastStatusText:SetFont(FONT, SMALL_FONT_SIZE, "OUTLINE")
-		clickCastStatusText:SetPoint("TOPLEFT", 14, -34)
+		clickCastStatusText:SetPoint("TOPLEFT", 14, -33)
 		clickCastStatusText:SetPoint("RIGHT", -186, 0)
 		clickCastStatusText:SetJustifyH("LEFT")
 
 		local openClickCastBtn = CreateActionButton(card2, "Configure Click-Cast...", 164, 22, function()
 			SelectTab("clickcast")
 		end)
-		openClickCastBtn:SetPoint("TOPRIGHT", -12, -30)
+		openClickCastBtn:SetPoint("TOPRIGHT", -12, -29)
 
 		local bindNote = card2:CreateFontString(nil, "OVERLAY")
 		bindNote:SetFont(FONT, SMALL_FONT_SIZE - 1, "OUTLINE")
-		bindNote:SetPoint("TOPLEFT", 14, -55)
-		bindNote:SetPoint("TOPRIGHT", -14, -55)
+		bindNote:SetPoint("TOPLEFT", 14, -52)
+		bindNote:SetPoint("TOPRIGHT", -14, -52)
 		bindNote:SetJustifyH("LEFT")
 		bindNote:SetTextColor(0.62, 0.62, 0.68)
 		bindNote:SetText("Configure buttons, modifiers, spells & Blizzard unit menu in Click-Cast.")
 
 		RefreshGroupUI = function()
+			local opts = ns.GetOptionsDB()
+			local petEnabled = opts.showPartyPets ~= false
+			local petPos = ns.GetPartyPetPosition()
+			petBelowBtn:SetActive(petPos == "below")
+			petRightBtn:SetActive(petPos == "right")
+			petLeftBtn:SetActive(petPos == "left")
+			petBelowBtn:SetEnabled(petEnabled)
+			petRightBtn:SetEnabled(petEnabled)
+			petLeftBtn:SetEnabled(petEnabled)
+			petBelowBtn:SetAlpha(petEnabled and 1 or 0.45)
+			petRightBtn:SetAlpha(petEnabled and 1 or 0.45)
+			petLeftBtn:SetAlpha(petEnabled and 1 or 0.45)
+
 			local pos = ns.GetPartyDebuffPosition()
 			posRightBtn:SetActive(pos == "right")
 			posBelowBtn:SetActive(pos == "below")
 			spacingSlider:SetValueSilent(ns.GetPartySpacing())
 			rangeSlider:SetValueSilent(math.floor(ns.GetRangeAlpha() * 100 + 0.5))
 
-			local ccEnabled = ns.GetOptionsDB().enableClickCast == true
+			local ccEnabled = opts.enableClickCast == true
 			local summary = ns.GetClickCastSummary and ns.GetClickCastSummary() or nil
 			if ccEnabled then
 				local cnt = summary and summary.enabledCount or 0
